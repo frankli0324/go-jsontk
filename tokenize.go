@@ -129,7 +129,7 @@ func Tokenize(s []byte) (result JSON, err error) {
 			currentType = NULL
 		case '/':
 			if i+1 < len(s) && s[i+1] == '/' {
-				for i < len(s) && s[i] != '\n' {
+				for i < len(s) && s[i] != '\r' && s[i] != '\n' {
 					i++
 				}
 				continue
