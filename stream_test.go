@@ -36,6 +36,15 @@ func TestJSONDatasets(t *testing.T) {
 	// }
 }
 
+func TestArrayIndex(t *testing.T) {
+	file, _ := os.ReadFile(path.Join("./testdata", "citm_catalog.json"))
+	j, _ := Tokenize(file)
+	i, _ := j.Get("events").Get("138586341").Get("subTopicIds").Index(1).Int64()
+	if i != 337184283 {
+		t.Fail()
+	}
+}
+
 func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 	b.StopTimer()
 	var ss []string

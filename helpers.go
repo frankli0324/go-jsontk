@@ -6,7 +6,28 @@ import (
 )
 
 func (j JSON) Index(i int) JSON {
-	// TODO
+	if len(j) == 0 || j[0].Type != BEGIN_ARRAY {
+		return nil
+	}
+	ctr, idx := -1, -2
+	for iv, v := range j {
+		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
+			ctr++
+		}
+		if v.Type == END_ARRAY || v.Type == END_OBJECT {
+			ctr--
+		}
+		if ctr == 0 {
+			idx++
+		} else if ctr > 0 {
+			continue
+		} else if ctr < 0 {
+			break
+		}
+		if idx == i {
+			return j[iv:]
+		}
+	}
 	return nil
 }
 
