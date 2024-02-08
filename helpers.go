@@ -14,7 +14,7 @@ func (j JSON) Get(key string) JSON {
 	if len(j) == 0 || j[0].Type != BEGIN_OBJECT {
 		return nil
 	}
-	ctr := 0
+	ctr := -1
 	for i, v := range j {
 		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
 			ctr++
@@ -22,15 +22,18 @@ func (j JSON) Get(key string) JSON {
 		if v.Type == END_ARRAY || v.Type == END_OBJECT {
 			ctr--
 		}
-		if ctr != 0 {
+		if ctr > 0 || v.Type != KEY {
 			continue
+		}
+		if ctr < 0 {
+			break
 		}
 		rk, err := unquoteBytes(v.Value)
 		if err != nil {
 			continue
 		}
-		if v.Type == KEY && key == rk {
-			return j[i:]
+		if key == rk {
+			return j[i+1:]
 		}
 	}
 	return nil
@@ -41,4 +44,11 @@ func (j JSON) Int64() (int64, error) {
 		return 0, errors.New("invalid")
 	}
 	return strconv.ParseInt(string(j[0].Value), 10, 64)
+}
+
+func (j JSON) String() (string, error) {
+	if len(j) == 0 || j[0].Type != STRING {
+		return "", errors.New("invalid")
+	}
+	return unquoteBytes(j[0].Value)
 }
