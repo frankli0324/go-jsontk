@@ -56,14 +56,9 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 			panic(fmt.Errorf("unexpected error: %s", err))
 		}
 		for pb.Next() {
-			for i := range tks {
-				k, _ := unquoteBytes(tks[i].Value)
-				if tks[i].Type == KEY && k == key {
-					v, _ := unquoteBytes(tks[i+1].Value)
-					if v != expectedValue {
-						panic(fmt.Errorf("unexpected value; got %q; want %q", string(tks[i+1].Value), expectedValue))
-					}
-				}
+			v, _ := tks.Get(key).String()
+			if v != expectedValue {
+				panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
 			}
 		}
 	})
