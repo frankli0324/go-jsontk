@@ -1,6 +1,7 @@
 package jsontk
 
 import (
+	"encoding/json"
 	"errors"
 	"strconv"
 )
@@ -60,6 +61,13 @@ func (j JSON) Get(key string) JSON {
 	return nil
 }
 
+func (j JSON) Number() (json.Number, error) {
+	if len(j) == 0 || j[0].Type != NUMBER {
+		return "", errors.New("invalid")
+	}
+	return json.Number(j[0].Value), nil
+}
+
 func (j JSON) Int64() (int64, error) {
 	if len(j) == 0 || j[0].Type != NUMBER {
 		return 0, errors.New("invalid")
@@ -67,9 +75,28 @@ func (j JSON) Int64() (int64, error) {
 	return strconv.ParseInt(string(j[0].Value), 10, 64)
 }
 
+func (j JSON) Float64() (float64, error) {
+	if len(j) == 0 || j[0].Type != NUMBER {
+		return 0, errors.New("invalid")
+	}
+	return strconv.ParseFloat(string(j[0].Value), 64)
+}
+
 func (j JSON) String() (string, error) {
 	if len(j) == 0 || j[0].Type != STRING {
 		return "", errors.New("invalid")
 	}
 	return unquoteBytes(j[0].Value)
+}
+
+func (j JSON) Bool() (bool, error) {
+	if len(j) == 0 || j[0].Type != BOOLEAN {
+		return false, errors.New("invalid")
+	}
+	// since it's successfully tokenized, values should be always certain
+	return j[0].Value[0] == 't', nil
+}
+
+func (j JSON) IsNull() bool {
+	return len(j) != 0 && j[0].Type == NULL
 }
