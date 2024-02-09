@@ -50,11 +50,7 @@ func (j JSON) Get(key string) JSON {
 		if ctr < 0 {
 			break
 		}
-		rk, err := unquoteBytes(v.Value)
-		if err != nil {
-			continue
-		}
-		if key == rk {
+		if rk, ok := unquote(v.Value); ok && key == rk {
 			return j[i+1:]
 		}
 	}
@@ -86,7 +82,11 @@ func (j JSON) String() (string, error) {
 	if len(j) == 0 || j[0].Type != STRING {
 		return "", errors.New("invalid")
 	}
-	return unquoteBytes(j[0].Value)
+	s, ok := unquote(j[0].Value)
+	if !ok {
+		return "", errors.New("invalid")
+	}
+	return s, nil
 }
 
 func (j JSON) Bool() (bool, error) {
