@@ -140,12 +140,12 @@ func Tokenize(s []byte) (result JSON, err error) {
 		if !nowExpect[currentType] && currentType != INVALID {
 			want := ""
 			for k := range nowExpect {
-				want += k.String() + ","
+				want += "," + k.String()
 			}
-			err = fmt.Errorf(
-				"%w: got %s, want one of:%s",
-				ErrUnexpectedToken, currentType.String(), want[:len(want)-1],
-			)
+			if len(want) != 0 {
+				want = want[1:]
+			}
+			err = fmt.Errorf("%w: got %s, want one of:[%s]", ErrUnexpectedToken, currentType.String(), want)
 			currentType = INVALID
 		}
 		switch stack[len(stack)-1] {
