@@ -94,12 +94,15 @@ func Tokenize(s []byte) (result JSON, err error) {
 				currentType = INVALID
 				i--
 			}
-		case '-':
-			i++
-			fallthrough // negative NUMBER
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == '.') {
-				i++
+		case '+', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			for i++; i < len(s); i++ {
+				if s[i] >= '0' && s[i] <= '9' {
+					continue
+				}
+				if s[i] == '.' || s[i] == 'e' || s[i] == 'E' || s[i] == '+' || s[i] == '-' {
+					continue
+				}
+				break
 			}
 			i--
 			currentType = NUMBER
@@ -125,11 +128,25 @@ func Tokenize(s []byte) (result JSON, err error) {
 			i += 3
 			currentType = NULL
 		case '/':
-			if i+1 < len(s) && s[i+1] == '/' {
-				for i < len(s) && s[i] != '\r' && s[i] != '\n' {
-					i++
+			if i+1 >= len(s) {
+				err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
+			} else {
+				switch s[i+1] {
+				case '/':
+					for i < len(s) && s[i] != '\r' && s[i] != '\n' {
+						i++
+					}
+					continue
+				case '*':
+					for i+1 < len(s) && s[i] != '*' && s[i+1] != '/' {
+						i++
+					}
+					if i+1 == len(s) {
+						err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
+					} else {
+						continue
+					}
 				}
-				continue
 			}
 		default:
 			err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
