@@ -47,8 +47,11 @@ func Tokenize(s []byte) (result JSON, err error) {
 		NUMBER: true, STRING: true, BOOLEAN: true, NULL: true,
 	}
 	for i := 0; i < len(s); i++ {
-		for s[i] == ' ' || s[i] == '\n' || s[i] == '\r' || s[i] == '\t' {
+		for i < len(s) && (s[i] == ' ' || s[i] == '\n' || s[i] == '\r' || s[i] == '\t') {
 			i++
+		}
+		if i == len(s) {
+			break
 		}
 		start := i
 		var currentType TokenType
@@ -86,15 +89,16 @@ func Tokenize(s []byte) (result JSON, err error) {
 				}
 			}
 			currentType = STRING
-			if i == len(s) && s[i] != '"' {
+			if i == len(s) {
 				err = fmt.Errorf("%w, expected end of string", ErrEarlyEOF)
 				currentType = INVALID
+				i--
 			}
 		case '-':
 			i++
 			fallthrough // negative NUMBER
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			for i < len(s) && (s[i] >= '0' && s[i] <= '9') || s[i] == '.' {
+			for i < len(s) && ((s[i] >= '0' && s[i] <= '9') || s[i] == '.') {
 				i++
 			}
 			i--
@@ -127,11 +131,13 @@ func Tokenize(s []byte) (result JSON, err error) {
 				}
 				continue
 			}
+		default:
+			err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
 		}
 		if currentType == STRING && nowExpect[KEY] {
 			currentType = KEY
 		}
-		if !nowExpect[currentType] {
+		if !nowExpect[currentType] && currentType != INVALID {
 			want := ""
 			for k := range nowExpect {
 				want += k.String() + ","
@@ -181,13 +187,15 @@ func Tokenize(s []byte) (result JSON, err error) {
 					err = fmt.Errorf("%w, expected ',' after value", ErrEarlyEOF)
 				}
 			} else if s[i+1] != ',' {
-				if s[i+1] != '}' && s[i+1] != ']' {
+				if s[i+1] != '}' && s[i+1] != ']' && len(stack) != 1 {
 					currentType = INVALID
 					err = fmt.Errorf("%w: expected ',' at %d, got %c", ErrUnexpectedSep, i+1, s[i+1])
 				}
 			} else {
 				i++
 			}
+		case INVALID:
+			return // don't need to add new token if already invalid
 		}
 
 		if currentType == INVALID {
