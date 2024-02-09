@@ -2,16 +2,6 @@ package jsontk
 
 import "fmt"
 
-var maybeNext = map[TokenType]byte{
-	END_OBJECT: ',',
-	END_ARRAY:  ',',
-	STRING:     ',',
-	NUMBER:     ',',
-	BOOLEAN:    ',',
-	NULL:       ',',
-	KEY:        ':',
-}
-
 // within an object, expected next token when encountered n
 var expObj = map[TokenType]map[TokenType]bool{
 	BEGIN_OBJECT: {KEY: true, END_OBJECT: true},
@@ -87,16 +77,19 @@ func Tokenize(s []byte) (result JSON, err error) {
 			}
 		case '"':
 			i++
-			cntEsc := 0
-			for i < len(s) && s[i] != '"' || cntEsc%2 == 1 {
-				if s[i] == '\\' {
-					cntEsc++
+			isEscaped := false
+			for ; i < len(s) && (s[i] != '"' || isEscaped); i++ {
+				if s[i] == '\\' && !isEscaped {
+					isEscaped = true
 				} else {
-					cntEsc = 0
+					isEscaped = false
 				}
-				i++
 			}
 			currentType = STRING
+			if i == len(s) && s[i] != '"' {
+				err = fmt.Errorf("%w, expected end of string", ErrEarlyEOF)
+				currentType = INVALID
+			}
 		case '-':
 			i++
 			fallthrough // negative NUMBER
@@ -164,25 +157,48 @@ func Tokenize(s []byte) (result JSON, err error) {
 		result = append(result, Token{
 			Type: currentType, Value: s[start : i+1],
 		})
+
+		// prepare for lookahead, consume until *next* char is valid
 		for i+1 < len(s) && (s[i+1] == ' ' || s[i+1] == '\n' || s[i+1] == '\r' || s[i+1] == '\t') {
 			i++
 		}
-		if n, ok := maybeNext[currentType]; ok {
-			if i+1 != len(s) && s[i+1] != n {
+		// lookahead
+		switch currentType {
+		case KEY: // key must be followed by a ':'
+			if i+1 >= len(s) {
+				currentType = INVALID
+				err = fmt.Errorf("%w, expected ':' after object key", ErrEarlyEOF)
+			} else if s[i+1] != ':' {
+				currentType = INVALID
+				err = fmt.Errorf("%w: expected ':' after object key at %d, got %c", ErrUnexpectedSep, i+1, s[i+1])
+			} else {
+				i++
+			}
+		case NUMBER, STRING, BOOLEAN, NULL, END_OBJECT, END_ARRAY:
+			if i+1 >= len(s) {
+				if len(stack) != 1 {
+					currentType = INVALID
+					err = fmt.Errorf("%w, expected ',' after value", ErrEarlyEOF)
+				}
+			} else if s[i+1] != ',' {
 				if s[i+1] != '}' && s[i+1] != ']' {
 					currentType = INVALID
-					err = fmt.Errorf("%w: expected '%c', got %c", ErrUnexpectedSep, n, s[i+1])
-					result = append(result, Token{
-						Type: INVALID, Value: s[i+1:],
-					})
+					err = fmt.Errorf("%w: expected ',' at %d, got %c", ErrUnexpectedSep, i+1, s[i+1])
 				}
 			} else {
 				i++
 			}
 		}
+
 		if currentType == INVALID {
+			if i+1 < len(s) {
+				result = append(result, Token{Type: INVALID, Value: s[i+1:]})
+			}
 			return
 		}
+	}
+	if len(stack) != 1 {
+		return result, ErrEarlyEOF
 	}
 	return result, nil
 }
