@@ -138,12 +138,13 @@ func Tokenize(s []byte) (result JSON, err error) {
 					}
 					continue
 				case '*':
-					for i+1 < len(s) && s[i] != '*' && s[i+1] != '/' {
+					for i+1 < len(s) && (s[i] != '*' || s[i+1] != '/') {
 						i++
 					}
 					if i+1 == len(s) {
 						err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
 					} else {
+						i++
 						continue
 					}
 				}
