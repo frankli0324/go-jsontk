@@ -36,7 +36,7 @@ func (j JSON) Get(key string) JSON {
 	if len(j) == 0 || j[0].Type != BEGIN_OBJECT {
 		return nil
 	}
-	ctr := -1
+	ctr, lastKey := -1, -1
 	for i, v := range j {
 		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
 			ctr++
@@ -51,10 +51,13 @@ func (j JSON) Get(key string) JSON {
 			break
 		}
 		if rk, ok := unquote(v.Value); ok && key == rk {
-			return j[i+1:]
+			lastKey = i + 1
 		}
 	}
-	return nil
+	if lastKey == -1 {
+		return nil
+	}
+	return j[lastKey:]
 }
 
 func (j JSON) Number() (json.Number, error) {
