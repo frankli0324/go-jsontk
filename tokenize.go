@@ -34,6 +34,41 @@ var expArr = map[TokenType]map[TokenType]bool{
 	},
 }
 
+func skip(s []byte) (i int) {
+	for i < len(s) {
+		switch s[i] {
+		case ' ', '\n', '\t', '\r':
+			i++
+		case '/':
+			if i+1 >= len(s) {
+				return i
+			}
+			switch s[i+1] {
+			case '/':
+				for i < len(s) && s[i] != '\r' && s[i] != '\n' {
+					i++
+				}
+				continue
+			case '*':
+				for i+1 < len(s) && (s[i] != '*' || s[i+1] != '/') {
+					i++
+				}
+				if i+2 == len(s) {
+					return i + 2
+				} else {
+					i += 2
+					continue
+				}
+			default:
+				return i
+			}
+		default:
+			return i
+		}
+	}
+	return i
+}
+
 type JSON []Token
 
 func Tokenize(s []byte) (result JSON, err error) {
@@ -47,10 +82,8 @@ func Tokenize(s []byte) (result JSON, err error) {
 		NUMBER: true, STRING: true, BOOLEAN: true, NULL: true,
 	}
 	for i := 0; i < len(s); i++ {
-		for i < len(s) && (s[i] == ' ' || s[i] == '\n' || s[i] == '\r' || s[i] == '\t') {
-			i++
-		}
-		if i == len(s) {
+		i += skip(s[i:])
+		if i >= len(s) {
 			break
 		}
 		start := i
@@ -127,28 +160,6 @@ func Tokenize(s []byte) (result JSON, err error) {
 			}
 			i += 3
 			currentType = NULL
-		case '/':
-			if i+1 >= len(s) {
-				err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
-			} else {
-				switch s[i+1] {
-				case '/':
-					for i < len(s) && s[i] != '\r' && s[i] != '\n' {
-						i++
-					}
-					continue
-				case '*':
-					for i+1 < len(s) && (s[i] != '*' || s[i+1] != '/') {
-						i++
-					}
-					if i+1 == len(s) {
-						err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
-					} else {
-						i++
-						continue
-					}
-				}
-			}
 		default:
 			err = fmt.Errorf("%w at %d", ErrUnexpectedToken, i)
 		}
@@ -183,9 +194,10 @@ func Tokenize(s []byte) (result JSON, err error) {
 		})
 
 		// prepare for lookahead, consume until *next* char is valid
-		for i+1 < len(s) && (s[i+1] == ' ' || s[i+1] == '\n' || s[i+1] == '\r' || s[i+1] == '\t') {
-			i++
+		if i+1 < len(s) {
+			i += skip(s[i+1:])
 		}
+
 		// lookahead
 		switch currentType {
 		case KEY: // key must be followed by a ':'
