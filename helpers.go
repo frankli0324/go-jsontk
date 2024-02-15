@@ -6,6 +6,13 @@ import (
 	"strconv"
 )
 
+func (j JSON) Type() TokenType {
+	if len(j) == 0 {
+		return INVALID
+	}
+	return j[0].Type
+}
+
 func (j JSON) Index(i int) JSON {
 	if len(j) == 0 || j[0].Type != BEGIN_ARRAY {
 		return nil
@@ -58,6 +65,36 @@ func (j JSON) Get(key string) JSON {
 		return nil
 	}
 	return j[lastKey:]
+}
+
+func (j JSON) BatchGet(into map[string]JSON) int {
+	if len(j) == 0 || j[0].Type != BEGIN_OBJECT {
+		return 0
+	}
+	ctr, cnt := -1, 0
+	for i, v := range j {
+		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
+			ctr++
+		}
+		if v.Type == END_ARRAY || v.Type == END_OBJECT {
+			ctr--
+		}
+		if ctr > 0 || v.Type != KEY {
+			continue
+		}
+		if ctr < 0 {
+			break
+		}
+		if rk, ok := unquote(v.Value); ok {
+			if v, ok := into[rk]; ok {
+				into[rk] = j[i+1:]
+				if v == nil {
+					cnt++
+				}
+			}
+		}
+	}
+	return cnt
 }
 
 func (j JSON) Number() (json.Number, error) {
