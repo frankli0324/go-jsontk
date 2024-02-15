@@ -13,6 +13,8 @@ const (
 	NUMBER
 	BOOLEAN
 	NULL
+
+	cntTokenType
 )
 
 var nameOf = map[TokenType]string{

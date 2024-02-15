@@ -1,9 +1,28 @@
 package jsontk
 
-import "fmt"
+import (
+	"fmt"
+)
+
+var expInitial = func(m map[TokenType]bool) (r [cntTokenType]bool) {
+	for k := range m {
+		r[k] = true
+	}
+	return
+}(map[TokenType]bool{
+	BEGIN_OBJECT: true, BEGIN_ARRAY: true,
+	NUMBER: true, STRING: true, BOOLEAN: true, NULL: true,
+})
 
 // within an object, expected next token when encountered n
-var expObj = map[TokenType]map[TokenType]bool{
+var expObj = func(m map[TokenType]map[TokenType]bool) (r [cntTokenType][cntTokenType]bool) {
+	for k := range m {
+		for l := range m[k] {
+			r[k][l] = true
+		}
+	}
+	return
+}(map[TokenType]map[TokenType]bool{
 	BEGIN_OBJECT: {KEY: true, END_OBJECT: true},
 	END_OBJECT:   {KEY: true, END_OBJECT: true},
 	END_ARRAY:    {KEY: true, END_OBJECT: true},
@@ -15,10 +34,17 @@ var expObj = map[TokenType]map[TokenType]bool{
 		NUMBER: true, STRING: true, BOOLEAN: true, NULL: true,
 		BEGIN_ARRAY: true, BEGIN_OBJECT: true,
 	},
-}
+})
 
 // within an array, expected next token when encountered n
-var expArr = map[TokenType]map[TokenType]bool{
+var expArr = func(m map[TokenType]map[TokenType]bool) (r [cntTokenType][cntTokenType]bool) {
+	for k := range m {
+		for l := range m[k] {
+			r[k][l] = true
+		}
+	}
+	return
+}(map[TokenType]map[TokenType]bool{
 	NUMBER:    {NUMBER: true, STRING: true, BOOLEAN: true, NULL: true, BEGIN_ARRAY: true, BEGIN_OBJECT: true, END_ARRAY: true},
 	STRING:    {NUMBER: true, STRING: true, BOOLEAN: true, NULL: true, BEGIN_ARRAY: true, BEGIN_OBJECT: true, END_ARRAY: true},
 	BOOLEAN:   {NUMBER: true, STRING: true, BOOLEAN: true, NULL: true, BEGIN_ARRAY: true, BEGIN_OBJECT: true, END_ARRAY: true},
@@ -32,7 +58,9 @@ var expArr = map[TokenType]map[TokenType]bool{
 		NUMBER: true, STRING: true, BOOLEAN: true, NULL: true,
 		BEGIN_ARRAY: true, BEGIN_OBJECT: true, END_ARRAY: true,
 	},
-}
+})
+
+var expNone = [cntTokenType]bool{}
 
 func skip(s []byte) (i int) {
 	for i < len(s) {
@@ -72,15 +100,12 @@ func skip(s []byte) (i int) {
 type JSON []Token
 
 func Tokenize(s []byte) (result JSON, err error) {
-	stack := make([]uint8, 0, 8)
-	stack = append(stack, 0) // root
+	result = make(JSON, 0, 3)
+	stack := make([]uint8, 1, 8)
 	// stack[-1] == 1 means currently in object, use expObj
 	// stack[-1] == 2 means currently in array, use expArr
 
-	var nowExpect = map[TokenType]bool{
-		BEGIN_OBJECT: true, BEGIN_ARRAY: true,
-		NUMBER: true, STRING: true, BOOLEAN: true, NULL: true,
-	}
+	nowExpect := expInitial
 	for i := 0; i < len(s); i++ {
 		i += skip(s[i:])
 		if i >= len(s) {
@@ -127,7 +152,7 @@ func Tokenize(s []byte) (result JSON, err error) {
 				currentType = INVALID
 				i--
 			}
-		case '+', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			for i++; i < len(s); i++ {
 				if s[i] >= '0' && s[i] <= '9' {
 					continue
@@ -168,8 +193,10 @@ func Tokenize(s []byte) (result JSON, err error) {
 		}
 		if !nowExpect[currentType] && currentType != INVALID {
 			want := ""
-			for k := range nowExpect {
-				want += "," + k.String()
+			for t, k := range nowExpect {
+				if k {
+					want += "," + TokenType(t).String()
+				}
 			}
 			if len(want) != 0 {
 				want = want[1:]
@@ -179,15 +206,11 @@ func Tokenize(s []byte) (result JSON, err error) {
 		}
 		switch stack[len(stack)-1] {
 		case 1:
-			if v, ok := expObj[currentType]; ok {
-				nowExpect = v
-			}
+			nowExpect = expObj[currentType]
 		case 2:
-			if v, ok := expArr[currentType]; ok {
-				nowExpect = v
-			}
+			nowExpect = expArr[currentType]
 		default:
-			nowExpect = nil
+			nowExpect = expNone
 		}
 		result = append(result, Token{
 			Type: currentType, Value: s[start : i+1],
