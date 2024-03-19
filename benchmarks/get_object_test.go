@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 		ss = append(ss, s)
 	}
 	s := "{" + strings.Join(ss, ",") + "}"
+	bs := []byte(s)
 	key := fmt.Sprintf("key_%d", len(ss)/2)
 	expectedValue := fmt.Sprintf("value_%d", len(ss)/2)
 
@@ -49,14 +51,34 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 		b.ReportAllocs()
 		b.SetBytes(int64(len(s)))
 		b.RunParallel(func(pb *testing.PB) {
-			tks, err := jsontk.Tokenize([]byte(s))
-			if err != nil {
-				panic(fmt.Errorf("unexpected error: %s", err))
-			}
+			var tks = &jsontk.JSON{}
+			var err error
 			for pb.Next() {
+				tks, err = jsontk.Tokenize(bs)
+				if err != nil {
+					panic(fmt.Errorf("unexpected error: %s", err))
+				}
 				v, _ := tks.Get(key).String()
 				if v != expectedValue {
 					panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
+				}
+				tks.Close()
+			}
+		})
+	})
+	b.Run("stdjson", func(b *testing.B) {
+		b.StartTimer()
+		b.ReportAllocs()
+		b.SetBytes(int64(len(s)))
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				m := map[string]string{}
+				err := json.Unmarshal(bs, &m)
+				if err != nil {
+					panic(fmt.Errorf("unexpected error: %s", err))
+				}
+				if m[key] != expectedValue {
+					panic(fmt.Errorf("unexpected value; got %q; want %q", m[key], expectedValue))
 				}
 			}
 		})
@@ -66,7 +88,7 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 func BenchmarkObjectGet(b *testing.B) {
 	for _, itemsCount := range []int{10, 100, 1000, 10000, 100000} {
 		b.Run(fmt.Sprintf("items_%d", itemsCount), func(b *testing.B) {
-			for _, lookupsCount := range []int{0, 1, 2, 4, 8, 16, 32, 64} {
+			for _, lookupsCount := range []int{64} {
 				b.Run(fmt.Sprintf("lookups_%d", lookupsCount), func(b *testing.B) {
 					benchmarkObjectGet(b, itemsCount, lookupsCount)
 				})
