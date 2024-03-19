@@ -44,6 +44,9 @@ for _, tk := range tks {
 
 > the results only shows the difference between standard library and jsontk, the succeeded cases are not shown.
 
-## Warning
+## Warning / Disclaimer
 
 EXPERIMENTAL
+
+This library is solely designed to extract payload fields in an **insecure** manner.
+You might not want to use this library unless you understand what you're doing

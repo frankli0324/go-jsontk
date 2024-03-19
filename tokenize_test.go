@@ -9,10 +9,12 @@ import (
 
 func TestTokenize(t *testing.T) {
 	res, err := Tokenize([]byte(`{"test":1,"xx":true,
-	"vv": // test
-	false}`))
-	fmt.Println(err)
-	for _, tk := range res {
+	"vv" // test
+	: false}`))
+	if err != nil {
+		t.Error(err)
+	}
+	for _, tk := range res.store {
 		fmt.Printf("%s->%s\n", tk.Type.String(), string(tk.Value))
 	}
 }
@@ -26,7 +28,7 @@ func TestJSONDatasets(t *testing.T) {
 			fmt.Println(path.Join("./testdata", ent.Name()), len(file))
 			_, err := Tokenize(file)
 			if err != nil {
-				t.Fail()
+				t.Error(err)
 			}
 		}
 	}
