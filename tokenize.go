@@ -2,6 +2,7 @@ package jsontk
 
 import (
 	"fmt"
+	"sync"
 )
 
 func skip(s []byte) (i int) {
@@ -98,9 +99,16 @@ func next(s []byte) (TokenType, int, error) {
 	}
 }
 
-type JSON []Token
+type JSON struct {
+	store []Token
+}
 
-func TokenizeInto(s []byte, result JSON) (JSON, error) {
+func (c *JSON) Close() {
+	c.store = c.store[:0]
+	pool.Put(c)
+}
+
+func (c *JSON) Tokenize(s []byte) error {
 	hadComma, wantComma := false, false
 
 	for i := 0; i < len(s); {
@@ -120,15 +128,15 @@ func TokenizeInto(s []byte, result JSON) (JSON, error) {
 				currentType = KEY
 				i++
 			} else {
-				return result, fmt.Errorf("%w at %d, expected string key", ErrUnexpectedToken, i)
+				return fmt.Errorf("%w at %d, expected string key", ErrUnexpectedToken, i)
 			}
 		}
 
 		if currentType != END_ARRAY && currentType != END_OBJECT && wantComma && !hadComma {
-			return result, fmt.Errorf("%w at %d, expected comma", ErrUnexpectedSep, start)
+			return fmt.Errorf("%w at %d, expected comma", ErrUnexpectedSep, start)
 		}
 		if !wantComma && hadComma {
-			return result, fmt.Errorf("%w at %d, unexpected comma", ErrUnexpectedSep, start)
+			return fmt.Errorf("%w at %d, unexpected comma", ErrUnexpectedSep, start)
 		}
 		wantComma = currentType >= STRING && currentType <= NULL || currentType == END_ARRAY || currentType == END_OBJECT
 		hadComma = i < len(s) && s[i] == ','
@@ -136,16 +144,23 @@ func TokenizeInto(s []byte, result JSON) (JSON, error) {
 			i++
 		}
 
-		result = append(result, Token{
+		c.store = append(c.store, Token{
 			Type: currentType, Value: s[start : start+length],
 		})
 		if errOnce != nil {
-			return result, fmt.Errorf("%w at %d", errOnce, start)
+			return fmt.Errorf("%w at %d", errOnce, start)
 		}
 	}
-	return result, nil
+	return nil
 }
 
-func Tokenize(s []byte) (result JSON, err error) {
-	return TokenizeInto(s, make(JSON, 0, 3))
+var pool = sync.Pool{
+	New: func() any {
+		return new(JSON)
+	},
+}
+
+func Tokenize(s []byte) (result *JSON, err error) {
+	result = pool.Get().(*JSON)
+	return result, result.Tokenize(s)
 }

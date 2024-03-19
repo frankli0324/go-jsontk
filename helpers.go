@@ -6,19 +6,19 @@ import (
 	"strconv"
 )
 
-func (j JSON) Type() TokenType {
-	if len(j) == 0 {
+func (j *JSON) Type() TokenType {
+	if j == nil || len(j.store) == 0 {
 		return INVALID
 	}
-	return j[0].Type
+	return j.store[0].Type
 }
 
-func (j JSON) Index(i int) JSON {
-	if len(j) == 0 || j[0].Type != BEGIN_ARRAY {
+func (j *JSON) Index(i int) *JSON {
+	if j.Type() != BEGIN_ARRAY {
 		return nil
 	}
 	ctr, idx := -1, -2
-	for iv, v := range j {
+	for iv, v := range j.store {
 		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
 			ctr++
 		}
@@ -33,18 +33,18 @@ func (j JSON) Index(i int) JSON {
 			break
 		}
 		if idx == i {
-			return j[iv:]
+			return &JSON{j.store[iv:]}
 		}
 	}
 	return nil
 }
 
-func (j JSON) Get(key string) JSON {
-	if len(j) == 0 || j[0].Type != BEGIN_OBJECT {
+func (j *JSON) Get(key string) *JSON {
+	if j.Type() != BEGIN_OBJECT {
 		return nil
 	}
 	ctr, lastKey := -1, -1
-	for i, v := range j {
+	for i, v := range j.store {
 		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
 			ctr++
 		}
@@ -64,15 +64,15 @@ func (j JSON) Get(key string) JSON {
 	if lastKey == -1 {
 		return nil
 	}
-	return j[lastKey:]
+	return &JSON{j.store[lastKey:]}
 }
 
-func (j JSON) BatchGet(into map[string]JSON) int {
-	if len(j) == 0 || j[0].Type != BEGIN_OBJECT {
+func (j *JSON) BatchGet(into map[string]*JSON) int {
+	if j.Type() != BEGIN_OBJECT {
 		return 0
 	}
 	ctr, cnt := -1, 0
-	for i, v := range j {
+	for i, v := range j.store {
 		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
 			ctr++
 		}
@@ -87,7 +87,7 @@ func (j JSON) BatchGet(into map[string]JSON) int {
 		}
 		if rk, ok := unquote(v.Value); ok {
 			if v, ok := into[rk]; ok {
-				into[rk] = j[i+1:]
+				into[rk] = &JSON{j.store[i+1:]}
 				if v == nil {
 					cnt++
 				}
@@ -97,46 +97,46 @@ func (j JSON) BatchGet(into map[string]JSON) int {
 	return cnt
 }
 
-func (j JSON) Number() (json.Number, error) {
-	if len(j) == 0 || j[0].Type != NUMBER {
+func (j *JSON) Number() (json.Number, error) {
+	if j.Type() != NUMBER {
 		return "", errors.New("invalid")
 	}
-	return json.Number(j[0].Value), nil
+	return json.Number(j.store[0].Value), nil
 }
 
-func (j JSON) Int64() (int64, error) {
-	if len(j) == 0 || j[0].Type != NUMBER {
+func (j *JSON) Int64() (int64, error) {
+	if j.Type() != NUMBER {
 		return 0, errors.New("invalid")
 	}
-	return strconv.ParseInt(string(j[0].Value), 10, 64)
+	return strconv.ParseInt(string(j.store[0].Value), 10, 64)
 }
 
-func (j JSON) Float64() (float64, error) {
-	if len(j) == 0 || j[0].Type != NUMBER {
+func (j *JSON) Float64() (float64, error) {
+	if j.Type() != NUMBER {
 		return 0, errors.New("invalid")
 	}
-	return strconv.ParseFloat(string(j[0].Value), 64)
+	return strconv.ParseFloat(string(j.store[0].Value), 64)
 }
 
-func (j JSON) String() (string, error) {
-	if len(j) == 0 || j[0].Type != STRING {
+func (j *JSON) String() (string, error) {
+	if j.Type() != STRING {
 		return "", errors.New("invalid")
 	}
-	s, ok := unquote(j[0].Value)
+	s, ok := unquote(j.store[0].Value)
 	if !ok {
 		return "", errors.New("invalid")
 	}
 	return s, nil
 }
 
-func (j JSON) Bool() (bool, error) {
-	if len(j) == 0 || j[0].Type != BOOLEAN {
+func (j *JSON) Bool() (bool, error) {
+	if j.Type() != BOOLEAN {
 		return false, errors.New("invalid")
 	}
 	// since it's successfully tokenized, values should be always certain
-	return j[0].Value[0] == 't', nil
+	return j.store[0].Value[0] == 't', nil
 }
 
-func (j JSON) IsNull() bool {
-	return len(j) != 0 && j[0].Type == NULL
+func (j *JSON) IsNull() bool {
+	return j.Type() == NULL
 }
