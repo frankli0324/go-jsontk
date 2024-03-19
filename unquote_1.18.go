@@ -2,11 +2,19 @@
 
 package jsontk
 
-import "unsafe"
+import (
+	"bytes"
+	"unsafe"
+)
 
-// unquote converts a quoted JSON string literal s into an actual string t.
-// The rules are different than for Go, so cannot use strconv.Unquote.
 func unquote(s []byte) (t string, ok bool) {
+	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
+		return
+	}
+	if bytes.IndexByte(s, '\\') < 0 {
+		s = s[1 : len(s)-1]
+		return *(*string)(unsafe.Pointer(&s)), true
+	}
 	s, ok = unquoteBytes(s)
 	t = *(*string)(unsafe.Pointer(&s))
 	return

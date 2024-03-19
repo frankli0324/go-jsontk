@@ -45,3 +45,16 @@ func TestArrayIndex(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestString(t *testing.T) {
+	j, _ := Tokenize([]byte(`{"test":"zxcv"}`))
+	i, _ := j.Get("test").String()
+	if i != "zxcv" {
+		t.Fail()
+	}
+	j, _ = Tokenize([]byte(`{"test":"z\txcv"}`))
+	i, _ = j.Get("test").String()
+	if i != "z\txcv" {
+		t.Fail()
+	}
+}
