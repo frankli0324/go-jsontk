@@ -39,6 +39,55 @@ func (j *JSON) Index(i int) *JSON {
 	return nil
 }
 
+func (j *JSON) Keys() []string {
+	if j.Type() != BEGIN_OBJECT {
+		return nil
+	}
+
+	ctr, ret := -1, []string{}
+	for _, v := range j.store {
+		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
+			ctr++
+		}
+		if v.Type == END_ARRAY || v.Type == END_OBJECT {
+			ctr--
+		}
+		if ctr > 0 || v.Type != KEY {
+			continue
+		}
+		if ctr < 0 {
+			break
+		}
+		if rk, ok := unquote(v.Value); ok {
+			ret = append(ret, rk)
+		}
+	}
+	return ret
+}
+
+func (j *JSON) Len() int {
+	if j.Type() != BEGIN_ARRAY {
+		return -1
+	}
+	ctr, cnt := -1, -1
+	for _, v := range j.store {
+		if v.Type == BEGIN_ARRAY || v.Type == BEGIN_OBJECT {
+			ctr++
+		}
+		if v.Type == END_ARRAY || v.Type == END_OBJECT {
+			ctr--
+		}
+		if ctr == 0 {
+			cnt++
+		} else if ctr > 0 {
+			continue
+		} else if ctr < 0 {
+			break
+		}
+	}
+	return cnt
+}
+
 func (j *JSON) Get(key string) *JSON {
 	if j.Type() != BEGIN_OBJECT {
 		return nil
