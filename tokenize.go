@@ -5,8 +5,11 @@ import (
 	"sync"
 )
 
-func skip(s []byte) (i int) {
+func skip(s []byte, i int) int {
 	for i < len(s) {
+		if s[i] > 0x20 && s[i] != '/' {
+			return i
+		}
 		switch s[i] {
 		case ' ', '\n', '\t', '\r':
 			i++
@@ -40,33 +43,39 @@ func skip(s []byte) (i int) {
 	return i
 }
 
+func eos(s []byte, i int) int {
+	isEscaped := false
+	for ; i < len(s) && (s[i] != '"' || isEscaped); i++ {
+		if s[i] == '\\' && !isEscaped {
+			isEscaped = true
+		} else {
+			isEscaped = false
+		}
+	}
+	return i
+}
+
 func next(s []byte) (TokenType, int, error) {
 	if len(s) == 0 {
 		return INVALID, 0, ErrEarlyEOF
 	}
 	switch s[0] {
-	case '{':
-		return BEGIN_OBJECT, 1, nil
-	case '}':
-		return END_OBJECT, 1, nil
-	case '[':
-		return BEGIN_ARRAY, 1, nil
-	case ']':
-		return END_ARRAY, 1, nil
 	case '"':
 		i := 1
-		isEscaped := false
-		for ; i < len(s) && (s[i] != '"' || isEscaped); i++ {
-			if s[i] == '\\' && !isEscaped {
-				isEscaped = true
-			} else {
-				isEscaped = false
+		for ; i < len(s) && s[i] != '"'; i++ {
+			if s[i] == '\\' {
+				i = eos(s, i)
+				break
 			}
 		}
 		if i == len(s) {
 			return INVALID, i, fmt.Errorf("%w, expected end of string", ErrEarlyEOF)
 		}
 		return STRING, i + 1, nil
+	case '{':
+		return BEGIN_OBJECT, 1, nil
+	case '[':
+		return BEGIN_ARRAY, 1, nil
 	case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		i := 1
 		for ; i < len(s); i++ {
@@ -94,6 +103,10 @@ func next(s []byte) (TokenType, int, error) {
 			return INVALID, len(s), fmt.Errorf("%w, expected null", ErrUnexpectedToken)
 		}
 		return NULL, 4, nil
+	case '}':
+		return END_OBJECT, 1, nil
+	case ']':
+		return END_ARRAY, 1, nil
 	default:
 		return INVALID, 1, ErrUnexpectedToken
 	}
@@ -109,20 +122,17 @@ func (c *JSON) Close() {
 }
 
 func (c *JSON) Tokenize(s []byte) error {
+	c.store = c.store[:0]
 	hadComma, wantComma := false, false
 
 	for i := 0; i < len(s); {
-		if i < len(s) {
-			i += skip(s[i:])
-		}
-		currentType, length, errOnce := next(s[i:])
-		start := i
+		i = skip(s, i)
 
-		i += length
+		currentType, length, errOnce := next(s[i:])
+
+		start := i
 		// prepare for lookahead, consume until next char is valid
-		if i < len(s) {
-			i += skip(s[i:])
-		}
+		i = skip(s, i+length)
 		if i < len(s) && s[i] == ':' {
 			if currentType == STRING {
 				currentType = KEY
