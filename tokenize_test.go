@@ -1,6 +1,7 @@
 package jsontk
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -56,5 +57,25 @@ func TestString(t *testing.T) {
 	i, _ = j.Get("test").String()
 	if i != "z\txcv" {
 		t.Fail()
+	}
+}
+
+func TestValidate(t *testing.T) {
+	v := []byte(`[null, 1, "1", {}]`)
+	fmt.Println(string(v))
+	j, _ := Tokenize(v)
+	fmt.Println(j.store)
+
+	if err := j.Validate(); err != nil {
+		t.Error(err)
+	}
+
+	v = []byte(`[null, 1, "1\t", {"a":1}],1234`)
+	fmt.Println(string(v))
+	j, _ = Tokenize(v)
+	fmt.Println(j.store)
+
+	if err := j.Validate(); err == nil {
+		t.Error(errors.New("should have failed in Validation"))
 	}
 }
