@@ -121,6 +121,9 @@ func (c *JSON) Close() {
 	pool.Put(c)
 }
 
+// Tokenize reads binary data into an array of JSON tokens.
+// The data passed in tokenize should never be changed even after calling [Tokenize]
+// or unexpected data could be read from the result.
 func (c *JSON) Tokenize(s []byte) error {
 	c.store = c.store[:0]
 	hadComma, wantComma := false, false
