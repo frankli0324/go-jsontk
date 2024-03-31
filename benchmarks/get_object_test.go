@@ -51,18 +51,18 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 		b.ReportAllocs()
 		b.SetBytes(int64(len(s)))
 		b.RunParallel(func(pb *testing.PB) {
-			var tks = &jsontk.JSON{}
-			var err error
+			tks := &jsontk.JSON{}
 			for pb.Next() {
-				tks, err = jsontk.Tokenize(bs)
+				err := tks.Tokenize(bs)
 				if err != nil {
 					panic(fmt.Errorf("unexpected error: %s", err))
 				}
-				v, _ := tks.Get(key).String()
-				if v != expectedValue {
-					panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
+				for i := 0; i < lookupsCount; i++ {
+					v, _ := tks.Get(key).String()
+					if v != expectedValue {
+						panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
+					}
 				}
-				tks.Close()
 			}
 		})
 	})
@@ -88,11 +88,7 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 func BenchmarkObjectGet(b *testing.B) {
 	for _, itemsCount := range []int{10, 100, 1000, 10000, 100000} {
 		b.Run(fmt.Sprintf("items_%d", itemsCount), func(b *testing.B) {
-			for _, lookupsCount := range []int{64} {
-				b.Run(fmt.Sprintf("lookups_%d", lookupsCount), func(b *testing.B) {
-					benchmarkObjectGet(b, itemsCount, lookupsCount)
-				})
-			}
+			benchmarkObjectGet(b, itemsCount, 0)
 		})
 	}
 }
