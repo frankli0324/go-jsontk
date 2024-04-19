@@ -83,12 +83,37 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 			}
 		})
 	})
+	if lookupsCount != 1 {
+		b.Log("lookups Count not 1, not running jsontk-iterate benchmark since it's not meaningful")
+		return
+	}
+	b.Run("jsontk-iterate", func(b *testing.B) {
+		b.StartTimer()
+		b.ReportAllocs()
+		b.SetBytes(int64(len(s)))
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				want := false
+				if err := jsontk.Iterate(bs, func(typ jsontk.TokenType, data []byte) {
+					if want && (typ != jsontk.STRING || string(data) != expectedValue) {
+						panic(fmt.Errorf("unexpected value; got %q; want %q", string(data), expectedValue))
+					}
+					if typ == jsontk.KEY && string(data) == key {
+						want = true
+					}
+				}); err != nil {
+					panic(fmt.Errorf("unexpected error: %s", err))
+				}
+			}
+		})
+	})
 }
 
 func BenchmarkObjectGet(b *testing.B) {
 	for _, itemsCount := range []int{10, 100, 1000, 10000, 100000} {
 		b.Run(fmt.Sprintf("items_%d", itemsCount), func(b *testing.B) {
-			benchmarkObjectGet(b, itemsCount, 0)
+			benchmarkObjectGet(b, itemsCount, 1)
+			benchmarkObjectGet(b, itemsCount, 10)
 		})
 	}
 }

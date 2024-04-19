@@ -121,11 +121,7 @@ func (c *JSON) Close() {
 	pool.Put(c)
 }
 
-// Tokenize reads binary data into an array of JSON tokens.
-// The data passed in tokenize should never be changed even after calling [Tokenize]
-// or unexpected data could be read from the result.
-func (c *JSON) Tokenize(s []byte) error {
-	c.store = c.store[:0]
+func Iterate(s []byte, cb func(typ TokenType, data []byte)) error {
 	hadComma, wantComma := false, false
 
 	for i := 0; i < len(s); {
@@ -157,14 +153,22 @@ func (c *JSON) Tokenize(s []byte) error {
 			i++
 		}
 
-		c.store = append(c.store, Token{
-			Type: currentType, Value: s[start : start+length],
-		})
+		cb(currentType, s[start:start+length])
 		if errOnce != nil {
 			return fmt.Errorf("%w at %d", errOnce, start)
 		}
 	}
 	return nil
+}
+
+// Tokenize reads binary data into an array of JSON tokens.
+// The data passed in tokenize should never be changed even after calling [Tokenize]
+// or unexpected data could be read from the result.
+func (c *JSON) Tokenize(s []byte) error {
+	c.store = c.store[:0]
+	return Iterate(s, func(typ TokenType, data []byte) {
+		c.store = append(c.store, Token{Type: typ, Value: data})
+	})
 }
 
 var pool = sync.Pool{
