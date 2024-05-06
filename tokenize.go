@@ -121,7 +121,7 @@ func (c *JSON) Close() {
 	pool.Put(c)
 }
 
-func Iterate(s []byte, cb func(typ TokenType, data []byte)) error {
+func Iterate(s []byte, cb func(typ TokenType, idx, len int)) error {
 	hadComma, wantComma := false, false
 
 	for i := 0; i < len(s); {
@@ -153,7 +153,7 @@ func Iterate(s []byte, cb func(typ TokenType, data []byte)) error {
 			i++
 		}
 
-		cb(currentType, s[start:start+length])
+		cb(currentType, start, length)
 		if errOnce != nil {
 			return fmt.Errorf("%w at %d", errOnce, start)
 		}
@@ -166,8 +166,8 @@ func Iterate(s []byte, cb func(typ TokenType, data []byte)) error {
 // or unexpected data could be read from the result.
 func (c *JSON) Tokenize(s []byte) error {
 	c.store = c.store[:0]
-	return Iterate(s, func(typ TokenType, data []byte) {
-		c.store = append(c.store, Token{Type: typ, Value: data})
+	return Iterate(s, func(typ TokenType, idx, len int) {
+		c.store = append(c.store, Token{Type: typ, Value: s[idx : idx+len]})
 	})
 }
 

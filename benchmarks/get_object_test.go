@@ -94,11 +94,11 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				want := false
-				if err := jsontk.Iterate(bs, func(typ jsontk.TokenType, data []byte) {
-					if want && (typ != jsontk.STRING || string(data) != expectedValue) {
-						panic(fmt.Errorf("unexpected value; got %q; want %q", string(data), expectedValue))
+				if err := jsontk.Iterate(bs, func(typ jsontk.TokenType, idx, len int) {
+					if want && (typ != jsontk.STRING || string(bs[idx:idx+len]) != expectedValue) {
+						panic(fmt.Errorf("unexpected value; got %q; want %q", string(bs[idx:idx+len]), expectedValue))
 					}
-					if typ == jsontk.KEY && string(data) == key {
+					if typ == jsontk.KEY && string(bs[idx:idx+len]) == key {
 						want = true
 					}
 				}); err != nil {
