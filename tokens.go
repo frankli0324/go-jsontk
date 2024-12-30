@@ -1,6 +1,6 @@
 package jsontk
 
-type TokenType int
+type TokenType uint8
 
 const (
 	INVALID TokenType = iota
@@ -17,7 +17,7 @@ const (
 	cntTokenType
 )
 
-var nameOf = map[TokenType]string{
+var nameOf = [cntTokenType]string{
 	INVALID:      "INVALID",
 	BEGIN_OBJECT: "BEGIN_OBJECT",
 	END_OBJECT:   "END_OBJECT",
@@ -30,6 +30,15 @@ var nameOf = map[TokenType]string{
 	NULL:         "NULL",
 }
 
+var assuredToken = [cntTokenType]string{
+	INVALID:      "<Invalid Token>",
+	BEGIN_OBJECT: "{",
+	END_OBJECT:   "}",
+	BEGIN_ARRAY:  "[",
+	END_ARRAY:    "]",
+	NULL:         "null",
+}
+
 func (t TokenType) String() string {
 	return nameOf[t]
 }
@@ -37,4 +46,11 @@ func (t TokenType) String() string {
 type Token struct {
 	Type  TokenType
 	Value []byte
+}
+
+func (t Token) AppendTo(data []byte) []byte {
+	if s := assuredToken[t.Type]; s != "" {
+		return append(data, s...)
+	}
+	return append(data, t.Value...)
 }

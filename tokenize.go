@@ -5,37 +5,33 @@ import (
 	"sync"
 )
 
+func skipComment(s []byte, i int) int {
+	if i+1 >= len(s) {
+		return i
+	}
+	switch s[i+1] {
+	case '/':
+		for i < len(s) && s[i] != '\r' && s[i] != '\n' {
+			i++
+		}
+		return i
+	case '*':
+		for i+1 < len(s) && (s[i] != '*' || s[i+1] != '/') {
+			i++
+		}
+		return i + 2
+	default:
+		return i
+	}
+}
+
 func skip(s []byte, i int) int {
 	for i < len(s) {
-		if s[i] > 0x20 && s[i] != '/' {
-			return i
-		}
 		switch s[i] {
 		case ' ', '\n', '\t', '\r':
 			i++
 		case '/':
-			if i+1 >= len(s) {
-				return i
-			}
-			switch s[i+1] {
-			case '/':
-				for i < len(s) && s[i] != '\r' && s[i] != '\n' {
-					i++
-				}
-				continue
-			case '*':
-				for i+1 < len(s) && (s[i] != '*' || s[i+1] != '/') {
-					i++
-				}
-				if i+2 == len(s) {
-					return i + 2
-				} else {
-					i += 2
-					continue
-				}
-			default:
-				return i
-			}
+			return skipComment(s, i)
 		default:
 			return i
 		}
@@ -141,7 +137,10 @@ func Iterate(s []byte, cb func(typ TokenType, idx, len int)) error {
 			}
 		}
 
-		if currentType != END_ARRAY && currentType != END_OBJECT && wantComma && !hadComma {
+		if currentType == END_ARRAY || currentType == END_OBJECT {
+			// intensionally don't check for previous comma
+			// if hadComma { return ErrUnexpectedSep }
+		} else if wantComma && !hadComma {
 			return fmt.Errorf("%w at %d, expected comma", ErrUnexpectedSep, start)
 		}
 		if !wantComma && hadComma {
@@ -158,6 +157,7 @@ func Iterate(s []byte, cb func(typ TokenType, idx, len int)) error {
 			return fmt.Errorf("%w at %d", errOnce, start)
 		}
 	}
+	// if hadComma { return ErrUnexpectedSep }
 	return nil
 }
 
@@ -167,7 +167,12 @@ func Iterate(s []byte, cb func(typ TokenType, idx, len int)) error {
 func (c *JSON) Tokenize(s []byte) error {
 	c.store = c.store[:0]
 	return Iterate(s, func(typ TokenType, idx, len int) {
-		c.store = append(c.store, Token{Type: typ, Value: s[idx : idx+len]})
+		switch typ {
+		case BEGIN_ARRAY, END_ARRAY, BEGIN_OBJECT, END_OBJECT, NULL:
+			c.store = append(c.store, Token{Type: typ})
+		default:
+			c.store = append(c.store, Token{Type: typ, Value: s[idx : idx+len]})
+		}
 	})
 }
 
