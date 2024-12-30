@@ -1,6 +1,7 @@
 package jsontk
 
 import (
+	"bytes"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -141,4 +142,127 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 		}
 	}
 	return b[0:w], true
+}
+
+// unquotedEqual returns unquoteBytes(s) == d without heap allocations
+func unquotedEqual(s, d []byte) (equal bool) {
+	s = s[1 : len(s)-1]
+
+	ps := 0
+	for ps < len(s) {
+		c := s[ps]
+		if c == '\\' || c == '"' || c < ' ' {
+			break
+		}
+		if c < utf8.RuneSelf {
+			ps++
+			continue
+		}
+		rr, size := utf8.DecodeRune(s[ps:])
+		if rr == utf8.RuneError && size == 1 {
+			break
+		}
+		ps += size
+	}
+	if ps == len(s) {
+		return bytes.Equal(s, d)
+	}
+
+	pd := ps
+	if pd > 0 && !bytes.Equal(s[:ps], d[:pd]) {
+		return false
+	}
+	for ps < len(s) {
+		switch c := s[ps]; {
+		case c == '\\':
+			ps++
+			if ps >= len(s) {
+				return
+			}
+			switch s[ps] {
+			default:
+				return
+			case '"', '\\', '/', '\'':
+				if d[pd] != s[ps] {
+					return false
+				}
+				ps++
+				pd++
+			case 'b':
+				if d[pd] != '\b' {
+					return false
+				}
+				ps++
+				pd++
+			case 'f':
+				if d[pd] != '\f' {
+					return false
+				}
+				ps++
+				pd++
+			case 'n':
+				if d[pd] != '\n' {
+					return false
+				}
+				ps++
+				pd++
+			case 'r':
+				if d[pd] != '\r' {
+					return false
+				}
+				ps++
+				pd++
+			case 't':
+				if d[pd] != '\t' {
+					return false
+				}
+				ps++
+				pd++
+			case 'u':
+				rr := getu4(s[ps-1:])
+				if rr < 0 {
+					return
+				}
+				ps += 5
+				if utf16.IsSurrogate(rr) {
+					rr1 := getu4(s[ps:])
+					rr = utf16.DecodeRune(rr, rr1)
+					if rr != unicode.ReplacementChar {
+						ps += 6
+					}
+				}
+				r, sz := utf8.DecodeRune(d[pd:])
+				if rr != r {
+					// could be RuneError, but wouldn't be equal anyway
+					return
+				}
+				pd += sz
+			}
+		// Quote, control characters are invalid.
+		case c == '"', c < ' ':
+			return
+		}
+		psn := ps
+		for ps < len(s) {
+			c := s[ps]
+			if c == '\\' || c == '"' || c < ' ' {
+				break
+			}
+
+			if c < utf8.RuneSelf {
+				ps++
+				continue
+			}
+			rr, size := utf8.DecodeRune(s[ps:])
+			ps += size
+			if rr == utf8.RuneError && size == 1 {
+				break
+			}
+		}
+		if psn < ps && !bytes.Equal(s[psn:ps], d[pd:pd+ps-psn]) {
+			return
+		}
+		pd += ps - psn
+	}
+	return true
 }

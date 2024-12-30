@@ -106,7 +106,7 @@ func (j *JSON) Get(key string) *JSON {
 		if ctr < 0 {
 			break
 		}
-		if rk, ok := unquote(v.Value); ok && key == rk {
+		if unquotedEqualStr(v.Value, key) {
 			lastKey = i + 1
 		}
 	}
