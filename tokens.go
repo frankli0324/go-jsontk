@@ -39,6 +39,19 @@ var assuredToken = [cntTokenType]string{
 	NULL:         "null",
 }
 
+var commaAfterToken = [cntTokenType]bool{
+	INVALID:      false,
+	BEGIN_OBJECT: false,
+	END_OBJECT:   true,
+	BEGIN_ARRAY:  false,
+	END_ARRAY:    true,
+	KEY:          false,
+	STRING:       true,
+	NUMBER:       true,
+	BOOLEAN:      true,
+	NULL:         true,
+}
+
 func (t TokenType) String() string {
 	return nameOf[t]
 }
