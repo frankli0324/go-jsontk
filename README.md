@@ -5,14 +5,30 @@
 
 又不是不能用，你就说比标准库快不快吧
 
-## features
+## Features
 
 ```jsonc
-{
-	"with" :  	// comments!
-     true,
- "allows": 1, // a bit of error
+{"parse":{"json":true,"into":["parts",1.1]}}
+```
+
+### Tokenize
+
+```go
+res, _ := Tokenize([]byte(`{"parse":{"json":true,"into":["parts",1.1]}}`))
+for _, tk := range res.store {
+    fmt.Printf("%s->%s\n", tk.Type.String(), string(tk.Value))
 }
+```
+
+### Iterate
+
+```go
+res, _ := Iterate(
+    []byte(`{"parse":{"json":true,"into":["parts",1.1]}}`),
+    func(typ TokenType, idx, len int) {
+        // emits same result as `Tokenize`, except with "idx" and "len" information
+    }
+)
 ```
 
 ## compatibility

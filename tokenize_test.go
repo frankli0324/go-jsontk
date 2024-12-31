@@ -10,7 +10,7 @@ import (
 
 func TestTokenize(t *testing.T) {
 	res, err := Tokenize([]byte(`{"test":1,"xx":true,
-	"vv" // test
+	"vv"
 	: false}`))
 	if err != nil {
 		t.Error(err)
@@ -63,8 +63,8 @@ func TestString(t *testing.T) {
 func TestValidate(t *testing.T) {
 	v := []byte(`[null, 1, "1", {}]`)
 	fmt.Println(string(v))
-	j, _ := Tokenize(v)
-	fmt.Println(j.store)
+	j, err := Tokenize(v)
+	fmt.Println(j.store, err)
 
 	if err := j.Validate(); err != nil {
 		t.Error(err)

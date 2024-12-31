@@ -4,33 +4,11 @@ import (
 	"fmt"
 )
 
-func skipComment(s []byte, i int) int {
-	if i+1 >= len(s) {
-		return i
-	}
-	switch s[i+1] {
-	case '/':
-		for i < len(s) && s[i] != '\r' && s[i] != '\n' {
-			i++
-		}
-		return i
-	case '*':
-		for i+1 < len(s) && (s[i] != '*' || s[i+1] != '/') {
-			i++
-		}
-		return i + 2
-	default:
-		return i
-	}
-}
-
 func skip(s []byte, i int) int {
 	for i < len(s) {
 		switch s[i] {
 		case ' ', '\n', '\t', '\r':
 			i++
-		case '/':
-			i = skipComment(s, i)
 		default:
 			return i
 		}
@@ -138,14 +116,10 @@ func Iterate(s []byte, cb func(typ TokenType, idx, len int)) error {
 			return fmt.Errorf("%w at %d, unexpected comma", ErrUnexpectedSep, start-1)
 		}
 		wantComma = commaAfterToken[currentType]
-		hasComma := i < len(s) && s[i] == ','
-		if hasComma {
-			if hadComma {
-				return fmt.Errorf("%w at %d, unexpected comma", ErrUnexpectedSep, i)
-			}
+		hadComma = i < len(s) && s[i] == ','
+		if hadComma {
 			i++
 		}
-		hadComma = hasComma
 
 		cb(currentType, start, length)
 		if errOnce != nil {
