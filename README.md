@@ -7,28 +7,25 @@
 
 ## Features
 
-```jsonc
-{"parse":{"json":true,"into":["parts",1.1]}}
-```
-
-### Tokenize
-
 ```go
-res, _ := Tokenize([]byte(`{"parse":{"json":true,"into":["parts",1.1]}}`))
+data := []byte(`{"tokenize":{"json":true,"into":["parts",1.1]}}`)
+
+// Tokenize
+res, _ := Tokenize(data)
 for _, tk := range res.store {
     fmt.Printf("%s->%s\n", tk.Type.String(), string(tk.Value))
 }
-```
+// Iterate
+res, _ := Iterate(data, func(typ TokenType, idx, len int) {
+    // emits same result as `Tokenize`, except with "idx" and "len" information
+})
+// Validate
+err := Validate(data)
 
-### Iterate
-
-```go
-res, _ := Iterate(
-    []byte(`{"parse":{"json":true,"into":["parts",1.1]}}`),
-    func(typ TokenType, idx, len int) {
-        // emits same result as `Tokenize`, except with "idx" and "len" information
-    }
-)
+// Iterator
+var iter Iterator // can be reused
+iter.Reset(data)
+...
 ```
 
 ## compatibility
