@@ -1,5 +1,10 @@
 package jsontk
 
+import (
+	"bytes"
+	"encoding/json"
+)
+
 type TokenType uint8
 
 const (
@@ -61,9 +66,33 @@ type Token struct {
 	Value []byte
 }
 
-func (t Token) AppendTo(data []byte) []byte {
+func (t *Token) AppendTo(data []byte) []byte {
 	if s := assuredToken[t.Type]; s != "" {
 		return append(data, s...)
 	}
 	return append(data, t.Value...)
+}
+
+func (j *Token) Number() json.Number {
+	return json.Number(j.Value)
+}
+
+// Unquote unquotes the underlying value as quoted string, and returns if it's successfully unquoted
+func (j *Token) Unquote() (string, bool) {
+	return unquote(j.Value)
+}
+
+// String behaves the same way as [Unquote] but not check for results, returns empty string on invalid results
+func (j *Token) String() string {
+	s, _ := unquote(j.Value)
+	return s
+}
+
+func (j *Token) EqualString(s string) bool {
+	return unquotedEqualStr(j.Value, s)
+}
+
+func (j *Token) Bool() bool {
+	// since it's successfully tokenized, values should be always certain
+	return bytes.Equal(j.Value, []byte("true"))
 }
