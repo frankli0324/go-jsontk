@@ -1,18 +1,20 @@
 package tests
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	_ "unsafe"
+
 	"github.com/frankli0324/go-jsontk"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fastjson"
 )
 
 var benchPool fastjson.ParserPool
 
-func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
+func benchmarkObjectGet(b *testing.B, itemsCount int) {
 	b.StopTimer()
 	var ss []string
 	for i := 0; i < itemsCount; i++ {
@@ -25,8 +27,6 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 	expectedValue := fmt.Sprintf("value_%d", len(ss)/2)
 
 	b.Run("fastjson", func(b *testing.B) {
-		b.StartTimer()
-		b.ReportAllocs()
 		b.SetBytes(int64(len(s)))
 		b.RunParallel(func(pb *testing.PB) {
 			p := benchPool.Get()
@@ -36,74 +36,57 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 					panic(fmt.Errorf("unexpected error: %s", err))
 				}
 				o := v.GetObject()
-				for i := 0; i < lookupsCount; i++ {
-					sb := o.Get(key).GetStringBytes()
-					if string(sb) != expectedValue {
-						panic(fmt.Errorf("unexpected value; got %q; want %q", sb, expectedValue))
-					}
+				sb := o.Get(key).GetStringBytes()
+				if string(sb) != expectedValue {
+					panic(fmt.Errorf("unexpected value; got %q; want %q", sb, expectedValue))
 				}
 			}
 			benchPool.Put(p)
 		})
 	})
 	b.Run("jsontk", func(b *testing.B) {
-		b.StartTimer()
-		b.ReportAllocs()
 		b.SetBytes(int64(len(s)))
 		b.RunParallel(func(pb *testing.PB) {
-			tks := &jsontk.JSON{}
 			for pb.Next() {
-				err := tks.Tokenize(bs)
+				tks, err := jsontk.Tokenize(bs)
 				if err != nil {
 					panic(fmt.Errorf("unexpected error: %s", err))
 				}
-				for i := 0; i < lookupsCount; i++ {
-					v, _ := tks.Get(key).String()
-					if v != expectedValue {
-						panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
-					}
+				v, _ := tks.Get(key).String()
+				if v != expectedValue {
+					panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
+				}
+				tks.Close()
+			}
+		})
+	})
+	b.Run("jsoniter", func(b *testing.B) {
+		b.SetBytes(int64(len(s)))
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				if v := jsoniter.Get(bs, key).ToString(); v != expectedValue {
+					panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
 				}
 			}
 		})
 	})
-	b.Run("stdjson", func(b *testing.B) {
-		b.StartTimer()
-		b.ReportAllocs()
-		b.SetBytes(int64(len(s)))
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				m := map[string]string{}
-				err := json.Unmarshal(bs, &m)
-				if err != nil {
-					panic(fmt.Errorf("unexpected error: %s", err))
-				}
-				if m[key] != expectedValue {
-					panic(fmt.Errorf("unexpected value; got %q; want %q", m[key], expectedValue))
-				}
-			}
-		})
-	})
-	if lookupsCount != 1 {
-		b.Log("lookups Count not 1, not running jsontk-iterate benchmark since it's not meaningful")
-		return
-	}
 	b.Run("jsontk-iterate", func(b *testing.B) {
-		b.StartTimer()
-		b.ReportAllocs()
 		b.SetBytes(int64(len(s)))
 		b.RunParallel(func(pb *testing.PB) {
+			iter := jsontk.Iterator{}
 			for pb.Next() {
-				want := false
-				if err := jsontk.Iterate(bs, func(typ jsontk.TokenType, idx, len int) {
-					if want && (typ != jsontk.STRING || string(bs[idx:idx+len]) != expectedValue) {
-						panic(fmt.Errorf("unexpected value; got %q; want %q", string(bs[idx:idx+len]), expectedValue))
+				iter.Reset(bs)
+				iter.NextObject(func(k *jsontk.Token) bool {
+					if k.EqualString(key) {
+						iter.NextToken(k)
+						if !k.EqualString(expectedValue) {
+							b.Error(fmt.Errorf("unexpected value; got %q; want %q", k.Value, expectedValue))
+						}
+						return false
 					}
-					if typ == jsontk.KEY && string(bs[idx:idx+len]) == key {
-						want = true
-					}
-				}); err != nil {
-					panic(fmt.Errorf("unexpected error: %s", err))
-				}
+					iter.Skip()
+					return true
+				})
 			}
 		})
 	})
@@ -112,8 +95,7 @@ func benchmarkObjectGet(b *testing.B, itemsCount, lookupsCount int) {
 func BenchmarkObjectGet(b *testing.B) {
 	for _, itemsCount := range []int{10, 100, 1000, 10000, 100000} {
 		b.Run(fmt.Sprintf("items_%d", itemsCount), func(b *testing.B) {
-			benchmarkObjectGet(b, itemsCount, 1)
-			benchmarkObjectGet(b, itemsCount, 10)
+			benchmarkObjectGet(b, itemsCount)
 		})
 	}
 }
