@@ -1,6 +1,7 @@
 package jsontk
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -59,4 +60,28 @@ func TestIteratorNextObject(t *testing.T) {
 		iter.Skip()
 		return true
 	})
+}
+
+func TestEarlyEOF(t *testing.T) {
+	var iter Iterator
+	iter.Reset(nil)
+	err := iter.NextObject(func(*Token) bool { return true })
+	if !errors.Is(err, ErrEarlyEOF) {
+		t.Error("nil slice should fail with EarlyEOF on NextObject")
+	}
+	iter.Reset([]byte("{"))
+	err = iter.NextObject(func(*Token) bool { return true })
+	if !errors.Is(err, ErrEarlyEOF) {
+		t.Error("{ should fail with EarlyEOF on NextObject")
+	}
+	iter.Reset(nil)
+	err = iter.NextArray(func(int) bool { return true })
+	if !errors.Is(err, ErrEarlyEOF) {
+		t.Error("nil slice should fail with EarlyEOF on NextArray")
+	}
+	iter.Reset([]byte("["))
+	err = iter.NextArray(func(int) bool { return true })
+	if !errors.Is(err, ErrEarlyEOF) {
+		t.Error("[ should fail with EarlyEOF on NextArray")
+	}
 }

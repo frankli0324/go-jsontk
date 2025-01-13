@@ -83,6 +83,10 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 		return iter.Error
 	}
 	iter.head = skip(iter.data, iter.head)
+	if iter.head >= len(iter.data) {
+		iter.Error = fmt.Errorf("%w while reading object", ErrEarlyEOF)
+		return iter.Error
+	}
 	if iter.data[iter.head] == '{' {
 		iter.head = skip(iter.data, iter.head+1)
 	}
@@ -99,7 +103,9 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 				iter.head = skip(iter.data, iter.head+1)
 				return nil
 			}
-			iter.Error = fmt.Errorf("%w at %d, expected string key", ErrUnexpectedToken, iter.head)
+			if iter.Error == nil {
+				iter.Error = fmt.Errorf("%w at %d, expected string key", ErrUnexpectedToken, iter.head)
+			}
 			return iter.Error
 		}
 		key.Value = iter.data[iter.head : iter.head+length]
@@ -120,6 +126,10 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 		}
 		iter.head = skip(iter.data, iter.head+1)
 	}
+	if iter.head >= len(iter.data) {
+		iter.Error = fmt.Errorf("%w while reading object, expecting END_OBJECT", ErrEarlyEOF)
+		return iter.Error
+	}
 	if iter.data[iter.head] != '}' {
 		iter.Error = fmt.Errorf("%w at %d, expected END_OBJECT", ErrUnexpectedToken, iter.head)
 		return iter.Error
@@ -133,6 +143,10 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 		return iter.Error
 	}
 	iter.head = skip(iter.data, iter.head)
+	if iter.head >= len(iter.data) {
+		iter.Error = fmt.Errorf("%w while reading array", ErrEarlyEOF)
+		return iter.Error
+	}
 	if iter.data[iter.head] == '[' {
 		iter.head = skip(iter.data, iter.head+1)
 	}
@@ -156,6 +170,10 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 			break
 		}
 		iter.head = skip(iter.data, iter.head+1)
+	}
+	if iter.head >= len(iter.data) {
+		iter.Error = fmt.Errorf("%w while reading array, expecting END_ARRAY", ErrEarlyEOF)
+		return iter.Error
 	}
 	if iter.data[iter.head] != ']' {
 		iter.Error = fmt.Errorf("%w at %d, expected END_ARRAY", ErrUnexpectedToken, iter.head)
