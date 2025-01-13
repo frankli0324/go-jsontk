@@ -28,9 +28,11 @@ iter.Reset(data)
 ...
 ```
 
-## compatibility
+## Correctness
 
-tested with `https://github.com/nst/JSONTestSuite` using this code:
+tested with `https://github.com/nst/JSONTestSuite` using demonstrated code:
+
+* Tokenize API
 
 ```go
 func walk(tks *jsontk.JSON) {
@@ -63,6 +65,58 @@ walk(tks)
 ```
 
 ![image](https://github.com/frankli0324/go-jsontk/assets/20221896/1f504938-1994-4cd9-aa5d-fcb162659a52)
+
+* Iterator API
+
+```go
+func walk(iter *jsontk.Iterator) {
+    var tk jsontk.Token
+    switch iter.Peek() {
+    case jsontk.BEGIN_OBJECT:
+        iter.NextObject(func(key *jsontk.Token) bool {
+            _, ok := key.Unquote()
+            if !ok {
+                os.Exit(1)
+            }
+            walk(iter)
+            return true
+        })
+    case jsontk.BEGIN_ARRAY:
+        iter.NextArray(func(idx int) bool {
+            walk(iter)
+            return true
+        })
+    case jsontk.STRING:
+        _, ok := iter.NextToken(&tk).Unquote()
+        if !ok {
+            os.Exit(1)
+        }
+    case jsontk.NUMBER:
+        _, err := iter.NextToken(&tk).Number().Float64()
+        if err != nil {
+            os.Exit(1)
+        }
+    case jsontk.INVALID:
+        os.Exit(1)
+    default:
+        iter.Skip()
+    }
+}
+
+var iter jsontk.Iterator
+iter.Reset(b)
+walk(&iter)
+if iter.Error != nil {
+    os.Exit(1)
+}
+_, _, l := iter.Next()
+if l != 0 {
+    os.Exit(1)
+}
+os.Exit(0)
+```
+
+![image](https://github.com/user-attachments/assets/baa460bd-450b-4bcf-a45c-d00f60cf15aa)
 
 > the results only shows the difference between standard library and jsontk, the succeeded cases are not shown.
 
