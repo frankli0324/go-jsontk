@@ -64,15 +64,16 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 	iter.head = skip(iter.data, iter.head)
 	loc := iter.head
 	typ, length, err := next(iter.data[iter.head:])
-	iter.Error = err
 	iter.head += length
-	if err == nil {
-		switch typ {
-		case BEGIN_ARRAY:
-			iter.NextArray(func(int) bool { return true })
-		case BEGIN_OBJECT:
-			iter.NextObject(func(*Token) bool { return true })
-		}
+
+	switch typ {
+	case BEGIN_ARRAY:
+		iter.NextArray(func(int) bool { return true })
+	case BEGIN_OBJECT:
+		iter.NextObject(func(*Token) bool { return true })
+	}
+	if err != nil {
+		iter.Error = err
 	}
 	return typ, loc, iter.head - loc
 }
