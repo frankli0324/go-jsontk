@@ -70,7 +70,7 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 	case BEGIN_ARRAY:
 		iter.NextArray(func(int) bool { return true })
 	case BEGIN_OBJECT:
-		iter.NextObject(func(*Token) bool { return true })
+		iter.NextObject(func(*Token) bool { iter.Skip(); return true })
 	}
 	if err != nil {
 		iter.Error = err
