@@ -11,6 +11,7 @@ var typMap = [256]TokenType{
 	'8': NUMBER, '9': NUMBER, '"': STRING,
 	't': BOOLEAN, 'f': BOOLEAN, 'n': NULL,
 	'[': BEGIN_ARRAY, '{': BEGIN_OBJECT,
+	']': END_ARRAY, '}': END_OBJECT,
 }
 
 type Iterator struct {
