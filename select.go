@@ -222,22 +222,22 @@ func parseJSONPath(path string) ([]selector, error) {
 				}
 			case '*':
 				selectors = append(selectors, wildcardSelector{})
-				path = path[1:]
+				path = path[2:]
 			default:
 				idx := strings.IndexFunc(path[1:], func(r rune) bool {
 					if r < utf8.RuneSelf && alphaDigitSlash.c(byte(r)) {
 						return false
 					}
-					if r != utf8.RuneError {
+					if r >= utf8.RuneSelf && r != utf8.RuneError {
 						return false
 					}
 					return true
 				})
 				if idx == -1 {
-					idx = len(path)
+					idx = len(path) - 1
 				}
-				selectors = append(selectors, nameSelector(path[1:idx]))
-				path = path[idx:]
+				selectors = append(selectors, nameSelector(path[1:idx+1]))
+				path = path[idx+1:]
 			}
 		case '[':
 			end, ret, err := parseJSONPathBracket(path[1:])
