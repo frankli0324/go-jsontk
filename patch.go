@@ -2,40 +2,7 @@ package jsontk
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 )
-
-func walkSegments(iter *Iterator, segments []string, f func(iter *Iterator) bool) error {
-	switch iter.Peek() {
-	case BEGIN_OBJECT:
-		return iter.NextObject(func(key *Token) bool {
-			if segments[0] == "*" || key.EqualString(segments[0]) {
-				if len(segments) == 1 {
-					return f(iter)
-				}
-				return walkSegments(iter, segments[1:], f) == nil
-			}
-			iter.Skip()
-			return true
-		})
-	case BEGIN_ARRAY:
-		wantIdx, okIdx := strconv.Atoi(segments[0])
-		return iter.NextArray(func(idx int) bool {
-			if segments[0] == "*" || (okIdx == nil && idx == wantIdx) {
-				if len(segments) == 1 {
-					return f(iter)
-				}
-				return walkSegments(iter, segments[1:], f) == nil
-			}
-			iter.Skip()
-			return true
-		})
-	default:
-		iter.Skip()
-		return ErrUnexpectedToken
-	}
-}
 
 // Patch API is currently unstable
 func Patch(data []byte, path string, f func([]byte) []byte) ([]byte, int) {
@@ -43,19 +10,10 @@ func Patch(data []byte, path string, f func([]byte) []byte) ([]byte, int) {
 		start, length int
 	}
 	var replaces []replaceOp
-
-	if !strings.HasPrefix(path, "$.") {
-		return nil, 0
-	}
-
-	segments := strings.Split(path[2:], ".")
-	if len(segments) == 0 {
-		return nil, 0
-	}
-
 	iter := Iterator{}
 	iter.Reset(data)
-	err := walkSegments(&iter, segments, func(iter *Iterator) bool {
+
+	err := iter.Select(path, func(iter *Iterator) {
 		value, loc, length := iter.Next()
 		switch value {
 		case BEGIN_ARRAY:
@@ -63,11 +21,10 @@ func Patch(data []byte, path string, f func([]byte) []byte) ([]byte, int) {
 		case BEGIN_OBJECT:
 			iter.Skip()
 		case INVALID:
-			return false
+			iter.Error = fmt.Errorf("%w at %d", ErrUnexpectedToken, iter.head)
 		default:
 			replaces = append(replaces, replaceOp{loc, length})
 		}
-		return true
 	})
 	if err == nil && iter.Error == ErrInterrupt {
 		err = fmt.Errorf("%w at %d", ErrUnexpectedToken, iter.head)

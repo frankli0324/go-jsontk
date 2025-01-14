@@ -69,7 +69,7 @@ func TestPatch(t *testing.T) {
 	})
 
 	t.Run("ReplaceSpecificArrayElement", func(t *testing.T) {
-		got, count := Patch([]byte(`[{"name": "old"}, {"name": "old"}]`), "$.0.name", func([]byte) []byte {
+		got, count := Patch([]byte(`[{"name": "old"}, {"name": "old"}]`), "$[0].name", func([]byte) []byte {
 			return []byte(`"new"`)
 		})
 		assertPatch(t, got, count, `[{"name": "new"}, {"name": "old"}]`, 1)
