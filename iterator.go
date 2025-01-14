@@ -18,6 +18,7 @@ type Iterator struct {
 	data  []byte
 	head  int
 	Error error
+	key   Token // used for temporarily storing object keys to avoid alloc
 }
 
 func (iter *Iterator) Reset(data []byte) {
@@ -82,6 +83,8 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 	return typ, loc, iter.head - loc
 }
 
+// NextObject iterates over the next value as an object, assuming that it is one.
+// One MUST be aware that the "key" callback parameter is only valid before next call to ANY method on [Iterator]
 func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 	if iter.Error != nil {
 		return iter.Error
@@ -94,7 +97,6 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 	if iter.data[iter.head] == '{' {
 		iter.head = skip(iter.data, iter.head+1)
 	}
-	key := Token{Type: KEY}
 	for {
 		currentType, length, errOnce := next(iter.data[iter.head:])
 		iter.Error = errOnce
@@ -112,14 +114,14 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 			}
 			return iter.Error
 		}
-		key.Value = iter.data[iter.head : iter.head+length]
+		iter.key = Token{Type: KEY, Value: iter.data[iter.head : iter.head+length]}
 		iter.head = skip(iter.data, iter.head+length)
 		if iter.head >= len(iter.data) || iter.data[iter.head] != ':' {
 			iter.Error = fmt.Errorf("%w at %d, expected colon", ErrUnexpectedToken, iter.head)
 			return iter.Error
 		}
 		iter.head++
-		if !cb(&key) {
+		if !cb(&iter.key) {
 			iter.Error = ErrInterrupt
 			return nil
 		}
