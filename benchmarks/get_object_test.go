@@ -44,22 +44,6 @@ func benchmarkObjectGet(b *testing.B, itemsCount int) {
 			benchPool.Put(p)
 		})
 	})
-	b.Run("jsontk", func(b *testing.B) {
-		b.SetBytes(int64(len(s)))
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				tks, err := jsontk.Tokenize(bs)
-				if err != nil {
-					panic(fmt.Errorf("unexpected error: %s", err))
-				}
-				v, _ := tks.Get(key).String()
-				if v != expectedValue {
-					panic(fmt.Errorf("unexpected value; got %q; want %q", v, expectedValue))
-				}
-				tks.Close()
-			}
-		})
-	})
 	b.Run("jsoniter", func(b *testing.B) {
 		b.SetBytes(int64(len(s)))
 		b.RunParallel(func(pb *testing.PB) {
@@ -70,7 +54,7 @@ func benchmarkObjectGet(b *testing.B, itemsCount int) {
 			}
 		})
 	})
-	b.Run("jsontk-iterate", func(b *testing.B) {
+	b.Run("jsontk-iterator", func(b *testing.B) {
 		b.SetBytes(int64(len(s)))
 		b.RunParallel(func(pb *testing.PB) {
 			iter := jsontk.Iterator{}
