@@ -50,6 +50,9 @@ func (iter *Iterator) Next() (TokenType, int, int) {
 }
 
 func (iter *Iterator) NextToken(t *Token) *Token {
+	if t == nil {
+		t = new(Token)
+	}
 	typ, idx, l := iter.Next()
 	t.Type = typ
 	if typ < cntTokenType && assuredToken[typ] == "" {
@@ -69,7 +72,7 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 
 	switch typ {
 	case BEGIN_ARRAY:
-		iter.NextArray(func(int) bool { return true })
+		iter.NextArray(func(int) bool { iter.Skip(); return true })
 	case BEGIN_OBJECT:
 		iter.NextObject(func(*Token) bool { iter.Skip(); return true })
 	}
@@ -120,6 +123,9 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 			iter.Error = ErrInterrupt
 			return nil
 		}
+		if iter.Error != nil {
+			return iter.Error
+		}
 
 		iter.head = skip(iter.data, iter.head)
 		if iter.head >= len(iter.data) || iter.data[iter.head] != ',' {
@@ -164,6 +170,9 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 		if !cb(idx) {
 			iter.Error = ErrInterrupt
 			return nil
+		}
+		if iter.Error != nil {
+			return iter.Error
 		}
 		idx++
 		iter.head = skip(iter.data, iter.head)
