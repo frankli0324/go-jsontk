@@ -25,6 +25,7 @@ func TestUnquotedEqual(t *testing.T) {
 
 func FuzzUnquotedEqual(f *testing.F) {
 	f.Add([]byte(`"test"`))
+	f.Add([]byte(`"\r\n test\t"`))
 
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if len(b) <= 2 || b[0] != '"' || b[len(b)-1] != '"' {
@@ -35,6 +36,14 @@ func FuzzUnquotedEqual(f *testing.F) {
 			return
 		}
 		t.Log(b, actual)
+		if !bytes.Equal([]byte("test"), actual) {
+			if unquotedEqual(b, []byte("test")) {
+				t.Fail()
+			}
+			if unquotedEqual([]byte(`"test"`), actual) {
+				t.Fail()
+			}
+		}
 		if !unquotedEqual(b, actual) {
 			t.Fail()
 		}

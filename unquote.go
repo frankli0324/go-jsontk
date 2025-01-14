@@ -172,14 +172,14 @@ func unquotedEqual(s, d []byte) (equal bool) {
 	}
 
 	pd := ps
-	if pd > 0 && !bytes.Equal(s[:ps], d[:pd]) {
+	if pd > len(d) || pd > 0 && !bytes.Equal(s[:ps], d[:pd]) {
 		return false
 	}
 	for ps < len(s) {
 		switch c := s[ps]; {
 		case c == '\\':
 			ps++
-			if ps >= len(s) {
+			if ps >= len(s) || pd >= len(d) {
 				return
 			}
 			switch s[ps] {
