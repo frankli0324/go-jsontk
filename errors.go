@@ -10,4 +10,5 @@ var (
 	ErrUnexpectedToken    = errors.New("invalid TokenType")
 	ErrInvalidParentheses = errors.New("invalid parentheses")
 	ErrStandardViolation  = errors.New("json not compliant to RFC8259") // for some simple validations
+	ErrInvalidJsonpath    = errors.New("invalid jsonpath")
 )
