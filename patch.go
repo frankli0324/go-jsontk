@@ -14,17 +14,17 @@ func Patch(data []byte, path string, f func([]byte) []byte) ([]byte, int) {
 	iter.Reset(data)
 
 	err := iter.Select(path, func(iter *Iterator) {
-		value, loc, length := iter.Next()
-		switch value {
-		case BEGIN_ARRAY:
-			iter.Skip()
-		case BEGIN_OBJECT:
-			iter.Skip()
-		case INVALID:
+		var loc, length int
+		switch iter.Peek() {
+		case BEGIN_ARRAY, BEGIN_OBJECT:
+			_, loc, length = iter.Skip()
+		case INVALID, END_ARRAY, END_OBJECT:
 			iter.Error = fmt.Errorf("%w at %d", ErrUnexpectedToken, iter.head)
+			return
 		default:
-			replaces = append(replaces, replaceOp{loc, length})
+			_, loc, length = iter.Next()
 		}
+		replaces = append(replaces, replaceOp{loc, length})
 	})
 	if err == nil && iter.Error == ErrInterrupt {
 		err = fmt.Errorf("%w at %d", ErrUnexpectedToken, iter.head)

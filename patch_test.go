@@ -1,6 +1,8 @@
 package jsontk
 
 import (
+	"encoding/json"
+	"strconv"
 	"testing"
 )
 
@@ -89,6 +91,28 @@ func TestPatch(t *testing.T) {
 		}
 
 		assertPatch(t, result, totalCount, `{"a": "new", "b": "new", "c": "new"}`, 3)
+	})
+	t.Run("PatchLargeJson", func(t *testing.T) {
+		var data = map[string]interface{}{}
+		for i := 0; i < 1000; i++ {
+			v := map[string]interface{}{}
+			for j := 0; j < 1000; j++ {
+				v[strconv.Itoa(j)] = "test"
+			}
+			data[strconv.Itoa(i)] = v
+		}
+		result, _ := json.Marshal(data)
+		data["500"] = "new"
+		data["501"].(map[string]interface{})["500"] = "new"
+		expected, _ := json.Marshal(data)
+
+		got, c1 := Patch(result, "$['500']", func([]byte) []byte {
+			return []byte(`"new"`)
+		})
+		got, c2 := Patch(got, "$['501'][\"500\"]", func([]byte) []byte {
+			return []byte(`"new"`)
+		})
+		assertPatch(t, got, c1+c2, string(expected), 2)
 	})
 }
 
