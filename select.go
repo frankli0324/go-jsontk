@@ -25,8 +25,9 @@ func traverse(iter *Iterator, sel []selector, f func(iter *Iterator)) {
 	case BEGIN_OBJECT:
 		iter.NextObject(func(key *Token) bool {
 			if sel[0] == recursive {
-				var iter = *iter // fork iter
-				traverse(&iter, sel, f)
+				save := iter.head
+				traverse(iter, sel, f)
+				iter.head = save
 			}
 			if sel[0].SelectObj(key, iter) {
 				traverse(iter, sel[1:], f)
@@ -36,10 +37,14 @@ func traverse(iter *Iterator, sel []selector, f func(iter *Iterator)) {
 			return true
 		})
 	case BEGIN_ARRAY:
+		if traverseInversedArr(iter, sel[0], f) {
+			return
+		}
 		iter.NextArray(func(idx int) bool {
 			if sel[0] == recursive {
-				var iter = *iter // fork iter
-				traverse(&iter, sel, f)
+				save := iter.head
+				traverse(iter, sel, f)
+				iter.head = save
 			}
 			if sel[0].SelectArr(idx, iter) {
 				traverse(iter, sel[1:], f)
@@ -51,6 +56,53 @@ func traverse(iter *Iterator, sel []selector, f func(iter *Iterator)) {
 	default:
 		iter.Skip()
 	}
+}
+
+func traverseInversedArr(iter *Iterator, sel selector, f func(iter *Iterator)) bool {
+	switch sel := sel.(type) {
+	case indexSelector:
+		if sel >= 0 {
+			return false
+		}
+	case *arrSliceSelector:
+		if sel.start >= 0 && (sel.end == -1 || sel.end >= 0) && sel.step >= 0 {
+			return false
+		}
+	default:
+		return false
+	}
+	indexes := make([]int, 0, 10)
+	if err := iter.NextArray(func(idx int) bool {
+		_, i, _ := iter.Skip()
+		indexes = append(indexes, i)
+		return true
+	}); err != nil {
+		return false
+	}
+	after := iter.head
+	switch sel := sel.(type) {
+	case indexSelector:
+		iter.head = indexes[len(indexes)+int(sel)]
+		f(iter)
+	case *arrSliceSelector:
+		s, e := sel.start, sel.end
+		if s < 0 {
+			s += len(indexes)
+		}
+		if e < 0 {
+			e += len(indexes)
+		}
+		for ; (e-s)*sel.step >= 0; s += sel.step {
+			if s >= 0 && s < len(indexes) {
+				iter.head = indexes[s]
+				f(iter)
+			}
+		}
+	}
+	if iter.Error == nil {
+		iter.head = after
+	}
+	return true
 }
 
 type as [8]uint32
@@ -81,28 +133,7 @@ var alphaDigitSlash = func() (as as) {
 
 func parseJSONPathBracket(b string) (end int, ret selector, err error) {
 	var segs = []selector{nil}[:0]
-	nextNum := func() (num int, isDefault bool) {
-		start := end
-		if end < len(b) && b[end] == '-' {
-			end++
-		}
-		for end < len(b) && b[end] >= '0' && b[end] <= '9' {
-			end++
-		}
-		if start == end {
-			return 0, true
-		}
-		if start == end-1 && b[start] == '-' {
-			return 0, false
-		}
-		num, err = strconv.Atoi(b[start:end])
-		if err != nil {
-			err = fmt.Errorf("%w: %s", ErrInvalidJsonpath, err.Error())
-		}
-		return num, false
-	}
 	for end < len(b) {
-		var nums [3]int
 		for end < len(b) && emptyChar.c(b[end]) {
 			end++
 		}
@@ -146,13 +177,28 @@ func parseJSONPathBracket(b string) (end int, ret selector, err error) {
 			end = endStr
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', ':':
 			cnt := 0
+			var nums = [3]int{0, -1, 1}
+			var isdefault [3]bool
 			for {
-				if num, defaultVal := nextNum(); err != nil {
+				numStop, num := end, 0
+				for numStop < len(b) && b[numStop] == '-' || b[numStop] >= '0' && b[numStop] <= '9' {
+					numStop++
+				}
+				if numStop == end {
+					isdefault[cnt] = true
+				} else if num, err = strconv.Atoi(b[end:numStop]); err != nil {
 					return
-				} else if defaultVal {
-					nums[cnt] = [3]int{0, -1, 1}[cnt]
 				} else {
 					nums[cnt] = num
+					if cnt == 2 && num < 0 {
+						if isdefault[0] {
+							nums[0] = -1
+						}
+						if isdefault[1] {
+							nums[1] = 0
+						}
+					}
+					end = numStop
 				}
 				for end < len(b) && emptyChar.c(b[end]) {
 					end++
@@ -165,9 +211,7 @@ func parseJSONPathBracket(b string) (end int, ret selector, err error) {
 			switch cnt {
 			case 0:
 				segs = append(segs, indexSelector(nums[0]))
-			case 1:
-				segs = append(segs, &arrSliceSelector{nums[0], nums[1], 1})
-			case 2:
+			case 1, 2:
 				segs = append(segs, &arrSliceSelector{nums[0], nums[1], nums[2]})
 			}
 		case '?':
@@ -305,12 +349,11 @@ func (s *arrSliceSelector) SelectArr(idx int, iter *Iterator) bool {
 	if s.step < 0 { // currently only positive step is supported
 		return false
 	}
-	if idx < s.start || idx >= s.end {
+	if idx < s.start || s.end != -1 && idx >= s.end {
 		return false
 	}
 	return (idx-s.start)%s.step == 0
 }
-
 func (i *arrSliceSelector) SelectObj(key *Token, iter *Iterator) bool {
 	return false
 }

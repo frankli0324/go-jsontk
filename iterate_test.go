@@ -25,7 +25,7 @@ func TestIterate(t *testing.T) {
 	"vv"
 	: false}`))
 	typList := []TokenType{BEGIN_OBJECT, KEY, NUMBER, KEY, BOOLEAN, KEY, BOOLEAN, END_OBJECT}
-	valList := [][]byte{nil, b(`"test"`), b("1"), b(`"xx"`), b("true"), b(`"vv"`), b("false"), nil}
+	valList := b("", `"test"`, "1", `"xx"`, "true", `"vv"`, "false", "")
 	if err != nil {
 		t.Error(err)
 	}
