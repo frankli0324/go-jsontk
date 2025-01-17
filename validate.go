@@ -1,32 +1,42 @@
 package jsontk
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 func (iter *Iterator) Validate() error {
-	return walk(iter)
+	if err := walk(iter); err != nil {
+		return err
+	}
+	if iter.Peek() != INVALID {
+		return ErrUnexpectedToken
+	}
+	return nil
 }
 
 func walk(iter *Iterator) (err error) {
 	switch iter.Peek() {
+	case END_OBJECT, END_ARRAY:
+		return ErrStandardViolation
 	case BEGIN_OBJECT:
-		iter.NextObject(func(key *Token) bool {
+		return iter.NextObject(func(key *Token) bool {
 			if !json.Valid(key.Value) {
-				err = ErrUnexpectedToken
+				err = ErrStandardViolation
 				return false
 			}
-			err = walk(iter)
-			return err == nil
+			iter.Error = walk(iter)
+			return iter.Error == nil
 		})
 	case BEGIN_ARRAY:
 		return iter.NextArray(func(idx int) bool {
-			err = walk(iter)
-			return err == nil
+			iter.Error = walk(iter)
+			return iter.Error == nil
 		})
 	case STRING:
 		var tk Token
 		iter.NextToken(&tk)
 		if !json.Valid(tk.Value) {
-			return ErrUnexpectedToken
+			return ErrStandardViolation
 		}
 	case NUMBER:
 		var tk Token

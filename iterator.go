@@ -121,12 +121,13 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 			return iter.Error
 		}
 		iter.head++
-		if !cb(&iter.key) {
-			iter.Error = ErrInterrupt
-			return nil
-		}
+		interrupted := !cb(&iter.key)
 		if iter.Error != nil {
 			return iter.Error
+		}
+		if interrupted {
+			iter.Error = ErrInterrupt
+			return nil
 		}
 
 		iter.head = skip(iter.data, iter.head)
@@ -169,12 +170,13 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 			iter.head = skip(iter.data, iter.head+1)
 			return nil
 		}
-		if !cb(idx) {
-			iter.Error = ErrInterrupt
-			return nil
-		}
+		interrupted := !cb(idx)
 		if iter.Error != nil {
 			return iter.Error
+		}
+		if interrupted {
+			iter.Error = ErrInterrupt
+			return nil
 		}
 		idx++
 		iter.head = skip(iter.data, iter.head)
