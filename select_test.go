@@ -63,12 +63,12 @@ func TestSelect(t *testing.T) {
 		}
 	})
 	t.Run("SelectMultipleKeys", func(t *testing.T) {
-		expt := Expectation(b(`"1"`, "2", "[3]", "4"))
+		expt := Expectation(b(`"1"`, "2", "[3]", "4", "5", "6"))
 		var iter Iterator
 		iter.Reset([]byte(`{
-	"test1": "1", "test2": 2, "test3\"": [3], "test4'": 4
+	"test1": "1", "test2": 2, "test3\"": [3], "test4'": 4,  "tes\'t5": 5, "tes\"t6": 6
 }`))
-		iter.Select(`$['test1',"test2", 'test3"', "test4'"]`, func(iter *Iterator) {
+		iter.Select(`$['test1',"test2", 'test3"', "test4'", 'tes\'t5', "tes\"t6"]`, func(iter *Iterator) {
 			_, i, l := iter.Skip()
 			if v, ok := expt.Next(iter.data[i : i+l]); !ok {
 				t.Errorf("result mismatch, expected %s, got %s", string(v), string(iter.data[i:i+l]))

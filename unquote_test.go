@@ -35,12 +35,14 @@ func FuzzUnquotedEqual(f *testing.F) {
 		if !ok || bytes.ContainsRune(actual, utf8.RuneError) {
 			return
 		}
-		t.Log(b, actual)
+		t.Log(string(b), string(actual))
 		if !bytes.Equal([]byte("test"), actual) {
 			if unquotedEqual(b, []byte("test")) {
+				t.Error("should not equal test")
 				t.Fail()
 			}
 			if unquotedEqual([]byte(`"test"`), actual) {
+				t.Error("test should not equal " + string(actual))
 				t.Fail()
 			}
 		}

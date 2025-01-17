@@ -7,32 +7,45 @@ import (
 	"unicode/utf8"
 )
 
-// This file was copied from encoding/json library.
+var escapeChars = [10]byte{
+	('b' - 'b') >> 1: '\b', //lint:ignore SA4000 consistency
+	('f' - 'b') >> 1: '\f',
+	('n' - 'b') >> 1: '\n',
+	('r' - 'b') >> 1: '\r',
+	('t' - 'b') >> 1: '\t',
+}
+
+var u4map = func() (r [256]rune) {
+	for i := 0; i < 256; i++ {
+		r[i] = -1
+	}
+	for i := '0'; i <= '9'; i++ {
+		r[i] = i - '0'
+	}
+	for i := 'A'; i <= 'F'; i++ {
+		r[i] = i - 'A' + 10
+	}
+	for i := 'a'; i <= 'f'; i++ {
+		r[i] = i - 'a' + 10
+	}
+	return
+}()
+
+// This file was taken and modified from encoding/json library.
 // (c) Golang: encoding/json/decode.go
 
 // getu4 decodes \uXXXX from the beginning of s, returning the hex value,
 // or it returns -1.
-func getu4(s []byte) rune {
-	if len(s) < 6 || s[0] != '\\' || s[1] != 'u' {
-		return -1
+func getu4(s []byte) (r rune) {
+	for _, c := range s {
+		r = (r << 4) | u4map[c]
 	}
-	var r rune
-	for _, c := range s[2:6] {
-		switch {
-		case '0' <= c && c <= '9':
-			c = c - '0'
-		case 'a' <= c && c <= 'f':
-			c = c - 'a' + 10
-		case 'A' <= c && c <= 'F':
-			c = c - 'A' + 10
-		default:
-			return -1
-		}
-		r = r*16 + rune(c)
-	}
-	return r
+	return
 }
 
+// unquoteBytes unquotes json strings
+// it assumes that quote escape is always correctly handled, so it won't
+// complain about unescaped quotes ("te"st" -> te"st)
 func unquoteBytes(s []byte) (t []byte, ok bool) {
 	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
 		return
@@ -86,49 +99,33 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 				b[w] = s[r]
 				r++
 				w++
-			case 'b':
-				b[w] = '\b'
-				r++
-				w++
-			case 'f':
-				b[w] = '\f'
-				r++
-				w++
-			case 'n':
-				b[w] = '\n'
-				r++
-				w++
-			case 'r':
-				b[w] = '\r'
-				r++
-				w++
-			case 't':
-				b[w] = '\t'
+			case 'b', 'f', 'n', 'r', 't':
+				b[w] = escapeChars[(s[r]-'b')>>1]
 				r++
 				w++
 			case 'u':
-				r--
-				rr := getu4(s[r:])
+				if r+5 > len(s) {
+					return
+				}
+				rr := getu4(s[r+1 : r+5])
 				if rr < 0 {
 					return
 				}
-				r += 6
+				r += 5
 				if utf16.IsSurrogate(rr) {
-					rr1 := getu4(s[r:])
-					if dec := utf16.DecodeRune(rr, rr1); dec != unicode.ReplacementChar {
-						// A valid pair; consume.
-						r += 6
-						w += utf8.EncodeRune(b[w:], dec)
-						break
+					if s[r] != '\\' || s[r+1] != 'u' || r+6 > len(s) {
+						return
 					}
-					// Invalid surrogate; fall back to replacement rune.
-					rr = unicode.ReplacementChar
+					rr = utf16.DecodeRune(rr, getu4(s[r+2:r+6]))
+					if rr != unicode.ReplacementChar {
+						r += 6
+					}
 				}
 				w += utf8.EncodeRune(b[w:], rr)
 			}
 
-		// Quote, control characters are invalid.
-		case c == '"', c < ' ':
+		// control characters are invalid.
+		case c < ' ':
 			return
 
 		// ASCII
@@ -148,38 +145,28 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 }
 
 // unquotedEqual returns unquoteBytes(s) == d without heap allocations
+// it assumes that quote escape is always correctly handled, so it won't
+// complain about unescaped quotes ("te"st" -> te"st)
 func unquotedEqual(s, d []byte) (equal bool) {
+	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
+		return false
+	}
 	s = s[1 : len(s)-1]
 
-	ps := 0
-	for ps < len(s) {
-		c := s[ps]
-		if c == '\\' || c == '"' || c < ' ' {
-			break
-		}
-		if c < utf8.RuneSelf {
-			ps++
-			continue
-		}
-		rr, size := utf8.DecodeRune(s[ps:])
-		if rr == utf8.RuneError && size == 1 {
-			break
-		}
-		ps += size
-	}
-	if ps == len(s) {
+	ps := bytes.IndexByte(s, '\\')
+	if ps == -1 {
 		return bytes.Equal(s, d)
 	}
 
 	pd := ps
-	if pd > len(d) || pd > 0 && !bytes.Equal(s[:ps], d[:pd]) {
+	if pd > len(d) || !bytes.Equal(s[:ps], d[:pd]) {
 		return false
 	}
-	for ps < len(s) {
+	for ps < len(s) && pd < len(d) {
 		switch c := s[ps]; {
 		case c == '\\':
 			ps++
-			if ps >= len(s) || pd >= len(d) {
+			if ps == len(s) {
 				return
 			}
 			switch s[ps] {
@@ -191,44 +178,26 @@ func unquotedEqual(s, d []byte) (equal bool) {
 				}
 				ps++
 				pd++
-			case 'b':
-				if d[pd] != '\b' {
-					return false
-				}
-				ps++
-				pd++
-			case 'f':
-				if d[pd] != '\f' {
-					return false
-				}
-				ps++
-				pd++
-			case 'n':
-				if d[pd] != '\n' {
-					return false
-				}
-				ps++
-				pd++
-			case 'r':
-				if d[pd] != '\r' {
-					return false
-				}
-				ps++
-				pd++
-			case 't':
-				if d[pd] != '\t' {
+			case 'b', 'f', 'n', 'r', 't':
+				if d[pd] != escapeChars[(s[ps]-'b')>>1] {
 					return false
 				}
 				ps++
 				pd++
 			case 'u':
-				rr := getu4(s[ps-1:])
+				if ps+5 > len(s) {
+					return
+				}
+				rr := getu4(s[ps+1 : ps+5])
 				if rr < 0 {
 					return
 				}
 				ps += 5
 				if utf16.IsSurrogate(rr) {
-					rr1 := getu4(s[ps:])
+					if s[ps] != '\\' || s[ps+1] != 'u' || ps+6 > len(s) {
+						return
+					}
+					rr1 := getu4(s[ps+2 : ps+6])
 					rr = utf16.DecodeRune(rr, rr1)
 					if rr != unicode.ReplacementChar {
 						ps += 6
@@ -241,31 +210,15 @@ func unquotedEqual(s, d []byte) (equal bool) {
 				}
 				pd += sz
 			}
-		// Quote, control characters are invalid.
-		case c == '"', c < ' ':
+		// control characters are invalid.
+		case c < ' ':
 			return
-		}
-		psn := ps
-		for ps < len(s) {
-			c := s[ps]
-			if c == '\\' || c == '"' || c < ' ' {
-				break
+		default:
+			if s[ps] != d[pd] {
+				return
 			}
-
-			if c < utf8.RuneSelf {
-				ps++
-				continue
-			}
-			rr, size := utf8.DecodeRune(s[ps:])
-			ps += size
-			if rr == utf8.RuneError && size == 1 {
-				break
-			}
+			ps, pd = ps+1, pd+1
 		}
-		if psn < ps && !bytes.Equal(s[psn:ps], d[pd:pd+ps-psn]) {
-			return
-		}
-		pd += ps - psn
 	}
-	return true
+	return ps == len(s) && pd == len(d)
 }

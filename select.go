@@ -145,15 +145,12 @@ func parseJSONPathBracket(b string) (end int, ret selector, err error) {
 			segs = append(segs, wildcardSelector{})
 			end++
 		case '\'', '"':
-			endStr, strEsc, repl := end+1, false, []int{}
-			for endStr < len(b) && b[endStr] != b[end] && !strEsc {
+			endStr, strEsc := end+1, false
+			for endStr < len(b) && (b[endStr] != b[end] || strEsc) {
 				if b[endStr] == '\\' {
 					strEsc = !strEsc
 				} else {
 					strEsc = false
-				}
-				if !strEsc && b[endStr] == '"' {
-					repl = append(repl, endStr)
 				}
 				endStr++
 			}
@@ -161,12 +158,8 @@ func parseJSONPathBracket(b string) (end int, ret selector, err error) {
 				return end, nil, fmt.Errorf("%w: invalid name selector", ErrInvalidJsonpath)
 			}
 			endStr++
-			str := append([]byte(b[end:endStr]), make([]byte, len(repl))...)[:endStr-end]
-			if str[0] == '\'' {
-				for _, r := range repl {
-					str = append(append(str[:r-end], '\\'), str[r-end:]...)
-					str[r-end+1] = '"'
-				}
+			str := []byte(b[end:endStr])[:endStr-end]
+			if str[0] == '\'' { // make sure that unquote will not complain about unescaped quotes
 				str[0], str[len(str)-1] = '"', '"'
 			}
 			unquoted, ok := unquote(str)
