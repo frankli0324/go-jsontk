@@ -7,6 +7,8 @@ import (
 	"unicode/utf8"
 )
 
+var minInt = -1 << (32<<(^uint(0)>>63) - 1)
+
 func (iter *Iterator) Select(path string, cb func(iter *Iterator)) error {
 	selectors, err := parseJSONPath(path)
 	if err != nil {
@@ -89,10 +91,12 @@ func traverseInversedArr(iter *Iterator, sel selector, f func(iter *Iterator)) b
 		if s < 0 {
 			s += len(indexes)
 		}
-		if e < 0 {
+		if e == minInt {
+			e = -1
+		} else if e < 0 {
 			e += len(indexes)
 		}
-		for ; (e-s)*sel.step >= 0; s += sel.step {
+		for ; (e-s)*sel.step > 0; s += sel.step {
 			if s >= 0 && s < len(indexes) {
 				iter.head = indexes[s]
 				f(iter)
@@ -188,7 +192,7 @@ func parseJSONPathBracket(b string) (end int, ret selector, err error) {
 							nums[0] = -1
 						}
 						if isdefault[1] {
-							nums[1] = 0
+							nums[1] = minInt
 						}
 					}
 					end = numStop
@@ -200,6 +204,9 @@ func parseJSONPathBracket(b string) (end int, ret selector, err error) {
 					break
 				}
 				cnt, end = cnt+1, end+1
+				for end < len(b) && emptyChar.c(b[end]) {
+					end++
+				}
 			}
 			switch cnt {
 			case 0:

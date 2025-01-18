@@ -149,10 +149,10 @@ func TestSelect(t *testing.T) {
 		}
 	})
 	t.Run("SliceBackwardSkipStep", func(t *testing.T) {
-		expt := Expectation(b("4", "2"))
+		expt := Expectation(b("6", "4"))
 		var iter Iterator
 		iter.Reset([]byte(`[1  ,2,  3, 4,5 , 6]`))
-		iter.Select(`$[3::-2]`, func(iter *Iterator) {
+		iter.Select(`$[5:1:-2]`, func(iter *Iterator) {
 			_, i, l := iter.Skip()
 			if v, ok := expt.Next(iter.data[i : i+l]); !ok {
 				t.Errorf("result mismatch, expected %s, got %s", string(v), string(iter.data[i:i+l]))
