@@ -44,7 +44,7 @@ func walk(iter *Iterator) (err error) {
 		_, err := tk.Number().Float64()
 		return err
 	case INVALID:
-		_, _, err := next(iter.data[iter.head:])
+		_, _, err := next(iter.data, iter.head)
 		return err
 	default:
 		iter.Skip()

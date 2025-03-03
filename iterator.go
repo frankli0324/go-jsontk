@@ -44,7 +44,7 @@ func (iter *Iterator) Next() (TokenType, int, int) {
 	}
 	iter.head = skip(iter.data, iter.head)
 	loc := iter.head
-	typ, length, err := next(iter.data[iter.head:])
+	typ, length, err := next(iter.data, iter.head)
 	iter.Error = err
 	iter.head += length
 	return typ, loc, length
@@ -68,7 +68,7 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 	}
 	iter.head = skip(iter.data, iter.head)
 	loc := iter.head
-	typ, length, err := next(iter.data[iter.head:])
+	typ, length, err := next(iter.data, iter.head)
 	iter.head += length
 
 	switch typ {
@@ -98,7 +98,7 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 		iter.head = skip(iter.data, iter.head+1)
 	}
 	for {
-		currentType, length, errOnce := next(iter.data[iter.head:])
+		currentType, length, errOnce := next(iter.data, iter.head)
 		iter.Error = errOnce
 		if currentType != STRING {
 			if currentType == END_OBJECT {

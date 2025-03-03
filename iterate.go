@@ -28,52 +28,52 @@ func eos(s []byte, i int) int {
 	return i
 }
 
-func next(s []byte) (TokenType, int, error) {
-	if len(s) == 0 {
+func next(s []byte, i int) (typ TokenType, length int, err error) {
+	if len(s) <= i {
 		return INVALID, 0, ErrEarlyEOF
 	}
-	switch s[0] {
+	switch s[i] {
 	case '"':
-		i := 1
-		for ; i < len(s) && s[i] != '"'; i++ {
-			if s[i] == '\\' {
-				i = eos(s, i)
+		j := i + 1
+		for ; j < len(s) && s[j] != '"'; j++ {
+			if s[j] == '\\' {
+				j = eos(s, j)
 				break
 			}
 		}
-		if i == len(s) {
-			return INVALID, i, fmt.Errorf("%w, expected end of string", ErrEarlyEOF)
+		if j == len(s) {
+			return INVALID, 0, fmt.Errorf("%w, expected end of string", ErrEarlyEOF)
 		}
-		return STRING, i + 1, nil
+		return STRING, j - i + 1, nil
 	case '{':
 		return BEGIN_OBJECT, 1, nil
 	case '[':
 		return BEGIN_ARRAY, 1, nil
 	case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		i := 1
-		for ; i < len(s); i++ {
-			if s[i] >= '0' && s[i] <= '9' {
+		j := i + 1
+		for ; j < len(s); j++ {
+			if s[j] >= '0' && s[j] <= '9' {
 				continue
 			}
-			if s[i] == '.' || s[i] == 'e' || s[i] == 'E' || s[i] == '+' || s[i] == '-' {
+			if s[j] == '.' || s[j] == 'e' || s[j] == 'E' || s[j] == '+' || s[j] == '-' {
 				continue
 			}
 			break
 		}
-		return NUMBER, i, nil
+		return NUMBER, j - i, nil
 	case 't':
-		if len(s) < 4 || s[1] != 'r' || s[2] != 'u' || s[3] != 'e' {
-			return INVALID, len(s), fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
+		if len(s)-i < 4 || s[i+1] != 'r' || s[i+2] != 'u' || s[i+3] != 'e' {
+			return INVALID, 0, fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
 		}
 		return BOOLEAN, 4, nil
 	case 'f':
-		if len(s) < 5 || s[1] != 'a' || s[2] != 'l' || s[3] != 's' || s[4] != 'e' {
-			return INVALID, len(s), fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
+		if len(s)-i < 5 || s[i+1] != 'a' || s[i+2] != 'l' || s[i+3] != 's' || s[i+4] != 'e' {
+			return INVALID, 0, fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
 		}
 		return BOOLEAN, 5, nil
 	case 'n':
-		if len(s) < 4 || s[1] != 'u' || s[2] != 'l' || s[3] != 'l' {
-			return INVALID, len(s), fmt.Errorf("%w, expected null", ErrUnexpectedToken)
+		if len(s)-i < 4 || s[i+1] != 'u' || s[i+2] != 'l' || s[i+3] != 'l' {
+			return INVALID, 0, fmt.Errorf("%w, expected null", ErrUnexpectedToken)
 		}
 		return NULL, 4, nil
 	case '}':
@@ -81,7 +81,7 @@ func next(s []byte) (TokenType, int, error) {
 	case ']':
 		return END_ARRAY, 1, nil
 	default:
-		return INVALID, 1, ErrUnexpectedToken
+		return INVALID, 0, ErrUnexpectedToken
 	}
 }
 
@@ -91,7 +91,7 @@ func Iterate(s []byte, cb func(typ TokenType, idx, len int)) error {
 	for i := 0; i < len(s); {
 		i = skip(s, i)
 
-		currentType, length, errOnce := next(s[i:])
+		currentType, length, errOnce := next(s, i)
 
 		start := i
 		// prepare for lookahead, consume until next char is valid
