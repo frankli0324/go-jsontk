@@ -73,8 +73,10 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 
 	switch typ {
 	case BEGIN_ARRAY:
+		iter.head--
 		iter.NextArray(func(int) bool { iter.Skip(); return true })
 	case BEGIN_OBJECT:
+		iter.head--
 		iter.NextObject(func(*Token) bool { iter.Skip(); return true })
 	}
 	if err != nil {
@@ -84,7 +86,8 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 }
 
 // NextObject iterates over the next value as an object, assuming that it is one.
-// One MUST be aware that the "key" callback parameter is only valid before next call to ANY method on [Iterator]
+// One MUST be aware that the "key" callback parameter is only valid before next call to ANY method on [Iterator],
+// even within the callback body
 func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 	if iter.Error != nil {
 		return iter.Error
@@ -94,19 +97,22 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 		iter.Error = fmt.Errorf("%w while reading object", ErrEarlyEOF)
 		return iter.Error
 	}
-	if iter.data[iter.head] == '{' {
-		iter.head = skip(iter.data, iter.head+1)
+	if iter.data[iter.head] != '{' {
+		iter.Error = fmt.Errorf("%w at %d, expected BEGIN_OBJECT", ErrUnexpectedToken, iter.head)
+		return iter.Error
 	}
+	iter.head++
 	for {
+		iter.head = skip(iter.data, iter.head)
+		if iter.head >= len(iter.data) {
+			iter.Error = fmt.Errorf("%w while reading object, expecting object key or END_OBJECT", ErrEarlyEOF)
+			return iter.Error
+		}
 		currentType, length, errOnce := next(iter.data, iter.head)
 		iter.Error = errOnce
 		if currentType != STRING {
 			if currentType == END_OBJECT {
-				// intensionally don't check for previous comma
-				// if StrictComma {
-				// 	return fmt.Errorf("%w at %d, unexpected comma", ErrUnexpectedSep, start-1)
-				// }
-				iter.head = skip(iter.data, iter.head+1)
+				iter.head++
 				return nil
 			}
 			if iter.Error == nil {
@@ -131,21 +137,20 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 		}
 
 		iter.head = skip(iter.data, iter.head)
-		if iter.head >= len(iter.data) || iter.data[iter.head] != ',' {
-			break
+		if iter.head >= len(iter.data) {
+			iter.Error = fmt.Errorf("%w while reading object, expecting comma or END_OBJECT", ErrEarlyEOF)
+			return iter.Error
 		}
-		iter.head = skip(iter.data, iter.head+1)
+		if iter.data[iter.head] != ',' {
+			if iter.data[iter.head] != '}' {
+				iter.Error = fmt.Errorf("%w at %d, expected comma or END_OBJECT", ErrUnexpectedToken, iter.head)
+				return iter.Error
+			}
+			iter.head++
+			return nil
+		}
+		iter.head++
 	}
-	if iter.head >= len(iter.data) {
-		iter.Error = fmt.Errorf("%w while reading object, expecting END_OBJECT", ErrEarlyEOF)
-		return iter.Error
-	}
-	if iter.data[iter.head] != '}' {
-		iter.Error = fmt.Errorf("%w at %d, expected END_OBJECT", ErrUnexpectedToken, iter.head)
-		return iter.Error
-	}
-	iter.head++
-	return nil
 }
 
 func (iter *Iterator) NextArray(cb func(idx int) bool) error {
@@ -157,16 +162,19 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 		iter.Error = fmt.Errorf("%w while reading array", ErrEarlyEOF)
 		return iter.Error
 	}
-	if iter.data[iter.head] == '[' {
-		iter.head = skip(iter.data, iter.head+1)
+	if iter.data[iter.head] != '[' {
+		iter.Error = fmt.Errorf("%w at %d, expected BEGIN_ARRAY", ErrUnexpectedToken, iter.head)
+		return iter.Error
 	}
-	idx := 0
-	for {
-		if iter.Peek() == END_ARRAY {
-			// intensionally don't check for previous comma
-			// if StrictComma {
-			// 	return fmt.Errorf("%w at %d, unexpected comma", ErrUnexpectedSep, start-1)
-			// }
+	iter.head++
+
+	for idx := 0; ; idx++ {
+		iter.head = skip(iter.data, iter.head)
+		if iter.head >= len(iter.data) {
+			iter.Error = fmt.Errorf("%w while reading array, expecting element or END_ARRAY", ErrEarlyEOF)
+			return iter.Error
+		}
+		if iter.data[iter.head] == ']' { // [] | [1,]
 			iter.head = skip(iter.data, iter.head+1)
 			return nil
 		}
@@ -175,24 +183,22 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 			return iter.Error
 		}
 		if interrupted {
-			iter.Error = ErrInterrupt
+			iter.Error = fmt.Errorf("%w at %d", ErrInterrupt, iter.head)
 			return nil
 		}
-		idx++
 		iter.head = skip(iter.data, iter.head)
-		if iter.head >= len(iter.data) || iter.data[iter.head] != ',' {
-			break
+		if iter.head >= len(iter.data) {
+			iter.Error = fmt.Errorf("%w while reading array, expecting comma or END_ARRAY", ErrEarlyEOF)
+			return iter.Error
 		}
-		iter.head = skip(iter.data, iter.head+1)
+		if iter.data[iter.head] != ',' {
+			if iter.data[iter.head] != ']' {
+				iter.Error = fmt.Errorf("%w at %d, expected comma or END_ARRAY", ErrUnexpectedToken, iter.head)
+				return iter.Error
+			}
+			iter.head++
+			return nil
+		}
+		iter.head++
 	}
-	if iter.head >= len(iter.data) {
-		iter.Error = fmt.Errorf("%w while reading array, expecting END_ARRAY", ErrEarlyEOF)
-		return iter.Error
-	}
-	if iter.data[iter.head] != ']' {
-		iter.Error = fmt.Errorf("%w at %d, expected END_ARRAY", ErrUnexpectedToken, iter.head)
-		return iter.Error
-	}
-	iter.head++
-	return nil
 }

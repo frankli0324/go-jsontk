@@ -13,8 +13,7 @@ func TestIterator(t *testing.T) {
 	: false, "ww": {"a": 1}, "zz": [1,2,3]}`)}
 	if err := iter.NextObject(func(key *Token) bool {
 		fmt.Println(key.String())
-		typ, _, _ := iter.Next()
-		switch typ {
+		switch iter.Peek() {
 		case BEGIN_ARRAY:
 			iter.NextArray(func(idx int) bool {
 				fmt.Println("\t", idx)
@@ -27,6 +26,8 @@ func TestIterator(t *testing.T) {
 				iter.Next()
 				return true
 			})
+		default:
+			iter.Next()
 		}
 		return true
 	}); err != nil {
