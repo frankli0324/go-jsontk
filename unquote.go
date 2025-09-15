@@ -113,12 +113,13 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 				}
 				r += 5
 				if utf16.IsSurrogate(rr) {
-					if s[r] != '\\' || s[r+1] != 'u' || r+6 > len(s) {
-						return
-					}
-					rr = utf16.DecodeRune(rr, getu4(s[r+2:r+6]))
-					if rr != unicode.ReplacementChar {
-						r += 6
+					if r+6 > len(s) || s[r] != '\\' || s[r+1] != 'u' {
+						rr = unicode.ReplacementChar
+					} else {
+						rr = utf16.DecodeRune(rr, getu4(s[r+2:r+6]))
+						if rr != unicode.ReplacementChar {
+							r += 6
+						}
 					}
 				}
 				w += utf8.EncodeRune(b[w:], rr)
