@@ -16,27 +16,6 @@ func Unmarshal(data []byte, into interface{}) error {
 	return writeVal(&iter, reflect.ValueOf(into))
 }
 
-var mapping = func() [10][26]bool {
-	f := map[jsontk.TokenType][]reflect.Kind{
-		jsontk.NULL:         {reflect.Slice, reflect.Map, reflect.Pointer},
-		jsontk.STRING:       {reflect.String},
-		jsontk.BEGIN_ARRAY:  {reflect.Array, reflect.Slice},
-		jsontk.BEGIN_OBJECT: {reflect.Struct, reflect.Map},
-		jsontk.BOOLEAN:      {reflect.Bool},
-		jsontk.NUMBER: {
-			reflect.Int, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Float32, reflect.Float64,
-		},
-	}
-	rev := [10][26]bool{}
-	for t, k := range f {
-		for _, k := range k {
-			rev[t][k] = true
-		}
-	}
-	return rev
-}()
-
 func writeStruct(iter *jsontk.Iterator, v reflect.Value) error {
 	sc := cachedStructIndex(v.Type())
 	return iter.NextObject(func(key *jsontk.Token) bool {
@@ -116,17 +95,26 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 		iter.Next()
 		return nil
 	}
-	if f.Kind() == reflect.Pointer {
+	fkind := f.Kind()
+	switch fkind {
+	case reflect.Interface:
+		v := createInterface[iter.Peek()]()
+		if err := writeVal(iter, v); err != nil {
+			return err
+		}
+		f.Set(v)
+		return nil
+	case reflect.Pointer:
 		if f.IsNil() {
 			f.Set(reflect.New(f.Type().Elem()))
 		}
 		return writeVal(iter, f.Elem())
 	}
-	if !mapping[iter.Peek()][f.Kind()] {
+	if !canUnmarshal[iter.Peek()][fkind] {
 		return fmt.Errorf("can't assign %s to %s", iter.Peek().String(), f.Kind().String())
 	}
 	var tk jsontk.Token
-	switch f.Kind() {
+	switch fkind {
 	case reflect.String:
 		iter.NextToken(&tk)
 		if tk.Type == jsontk.INVALID {
@@ -173,4 +161,49 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 		iter.Skip()
 	}
 	return nil
+}
+
+var canUnmarshal = func() [10][26]bool {
+	rev := [10][26]bool{}
+	for t, k := range map[jsontk.TokenType][]reflect.Kind{
+		jsontk.NULL:         {reflect.Slice, reflect.Map, reflect.Pointer},
+		jsontk.STRING:       {reflect.String},
+		jsontk.BEGIN_ARRAY:  {reflect.Array, reflect.Slice},
+		jsontk.BEGIN_OBJECT: {reflect.Struct, reflect.Map},
+		jsontk.BOOLEAN:      {reflect.Bool},
+		jsontk.NUMBER: {
+			reflect.Int, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Float32, reflect.Float64,
+		},
+	} {
+		for _, k := range k {
+			rev[t][k] = true
+		}
+	}
+	return rev
+}()
+var createInterface = [10]func() reflect.Value{
+	jsontk.NULL: func() reflect.Value {
+		return reflect.ValueOf(nil)
+	},
+	jsontk.STRING: func() reflect.Value {
+		var s string
+		return reflect.ValueOf(&s).Elem()
+	},
+	jsontk.BEGIN_ARRAY: func() reflect.Value {
+		var s []interface{}
+		return reflect.ValueOf(&s).Elem()
+	},
+	jsontk.BEGIN_OBJECT: func() reflect.Value {
+		var o map[string]interface{}
+		return reflect.ValueOf(&o).Elem()
+	},
+	jsontk.BOOLEAN: func() reflect.Value {
+		var b bool
+		return reflect.ValueOf(&b).Elem()
+	},
+	jsontk.NUMBER: func() reflect.Value {
+		var f float64
+		return reflect.ValueOf(&f).Elem()
+	},
 }
