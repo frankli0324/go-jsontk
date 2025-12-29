@@ -1,6 +1,7 @@
 package json
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -13,14 +14,23 @@ import (
 func Unmarshal(data []byte, into interface{}) error {
 	var iter jsontk.Iterator
 	iter.Reset(data)
-	return writeVal(&iter, reflect.ValueOf(into))
+	v := reflect.ValueOf(into)
+	if v.Kind() != reflect.Pointer {
+		return fmt.Errorf("must Unmarshal into a pointer")
+	}
+	return writeVal(&iter, v.Elem())
 }
 
 func writeStruct(iter *jsontk.Iterator, v reflect.Value) error {
 	sc := cachedStructIndex(v.Type())
 	return iter.NextObject(func(key *jsontk.Token) bool {
 		fn := key.String()
-		f := v.FieldByIndex(sc[fn])
+		field, ok := sc[fn]
+		if !ok {
+			iter.Skip()
+			return true
+		}
+		f := v.FieldByIndex(field)
 		if f.Kind() == reflect.Invalid {
 			iter.Error = fmt.Errorf("invalid field %s", fn)
 		}
@@ -32,101 +42,139 @@ func writeStruct(iter *jsontk.Iterator, v reflect.Value) error {
 	})
 }
 
-func writeMap(iter *jsontk.Iterator, v reflect.Value) (reflect.Value, error) {
+func writeMap(iter *jsontk.Iterator, v reflect.Value) error {
 	if v.IsNil() {
-		v = reflect.MakeMap(v.Type())
+		v.Set(reflect.MakeMap(v.Type()))
 	}
 	keyType := v.Type().Key()
 	valType := v.Type().Elem()
-	err := iter.NextObject(func(key *jsontk.Token) bool {
-		k := reflect.New(keyType).Elem()
-		k.SetString(key.String())
+	mkey := reflect.New(keyType).Elem()
+	return iter.NextObject(func(key *jsontk.Token) bool {
+		mkey.SetString(key.String())
 		val := reflect.New(valType).Elem()
 		if e := writeVal(iter, val); e != nil {
 			iter.Error = e
 			return false
 		}
-		v.SetMapIndex(k, val)
+		v.SetMapIndex(mkey, val)
 		return true
 	})
-	return v, err
 }
 
-func writeSlice(iter *jsontk.Iterator, v reflect.Value) (reflect.Value, error) {
-	elem := v.Type().Elem()
-	v = reflect.MakeSlice(v.Type(), 0, 3)
-	return v, iter.NextArray(func(idx int) bool {
-		val := reflect.New(elem).Elem()
-		if err := writeVal(iter, val); err != nil {
+func writeSlice(iter *jsontk.Iterator, v reflect.Value) error {
+	vtyp := v.Type()
+	if v.IsNil() {
+		v.Set(reflect.MakeSlice(vtyp, 0, 4))
+	}
+	return iter.NextArray(func(idx int) bool {
+		if idx >= v.Cap() {
+			newcap := v.Cap() + v.Cap()/2
+			newv := reflect.MakeSlice(vtyp, v.Len(), newcap)
+			reflect.Copy(newv, v)
+			v.Set(newv)
+		}
+		v.SetLen(idx + 1)
+		if err := writeVal(iter, v.Index(idx)); err != nil {
 			iter.Error = err
 			return false
 		}
-		v = reflect.Append(v, val)
 		return true
 	})
 }
 
 func writeArray(iter *jsontk.Iterator, v reflect.Value) error {
-	elemType := v.Type().Elem()
 	length := v.Len()
-	i := 0
-
 	return iter.NextArray(func(idx int) bool {
 		// If JSON array has more elements than Go array capacity — skip extras
-		if i >= length {
+		if idx >= length {
 			// skip remaining elements but keep consuming tokens
 			iter.Skip()
 			return true
 		}
-
-		elem := reflect.New(elemType).Elem()
-		if err := writeVal(iter, elem); err != nil {
+		if err := writeVal(iter, v.Index(idx)); err != nil {
 			iter.Error = err
 			return false
 		}
-		v.Index(i).Set(elem)
-		i++
 		return true
 	})
 }
 
+var jsonUnmarshaller = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+
 func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
-	if iter.Peek() == jsontk.NULL {
-		iter.Next()
-		return nil
+	nxt, fkind, ftyp := iter.Peek(), f.Kind(), f.Type()
+	if f.CanInterface() && ftyp.Implements(jsonUnmarshaller) {
+		// TODO: json.Unmarshaler
 	}
-	fkind := f.Kind()
-	switch fkind {
-	case reflect.Interface:
-		v := createInterface[iter.Peek()]()
-		if err := writeVal(iter, v); err != nil {
-			return err
+	if nxt == jsontk.NULL {
+		if t, _, _ := iter.Next(); t != jsontk.NULL {
+			if iter.Error != nil {
+				return iter.Error
+			}
+			return fmt.Errorf("invalid jsontk internal state: expected null but got %s", t.String())
 		}
-		f.Set(v)
-		return nil
-	case reflect.Pointer:
+		switch ftyp.Kind() {
+		case reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Map:
+		default:
+			// this is intensional, std lib explicitly behaves like this!
+			return nil
+		}
 		if f.IsNil() {
-			f.Set(reflect.New(f.Type().Elem()))
+			return nil
 		}
-		return writeVal(iter, f.Elem())
+		if !f.CanSet() {
+			return fmt.Errorf("can't assign %s to %s", nxt.String(), fkind.String())
+		}
+		f.Set(reflect.Zero(ftyp)) // f.SetZero is added in go1.20
+		return nil
 	}
-	if !canUnmarshal[iter.Peek()][fkind] {
-		return fmt.Errorf("can't assign %s to %s", iter.Peek().String(), f.Kind().String())
+	if !canUnmarshal[nxt][fkind] {
+		return fmt.Errorf("can't assign %s to %s: type mismatch", nxt.String(), fkind.String())
 	}
 	var tk jsontk.Token
 	switch fkind {
+	case reflect.Interface:
+		if f.IsNil() {
+			if !f.CanSet() {
+				return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
+			}
+			f.Set(createInterface[nxt]())
+		}
+		if err := writeVal(iter, f.Elem()); err != nil {
+			return err
+		}
+	case reflect.Pointer:
+		if f.IsNil() {
+			if !f.CanSet() {
+				return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
+			}
+			f.Set(reflect.New(ftyp.Elem()))
+		}
+		if err := writeVal(iter, f.Elem()); err != nil {
+			return err
+		}
 	case reflect.String:
 		iter.NextToken(&tk)
 		if tk.Type == jsontk.INVALID {
-			return fmt.Errorf("invalid string")
+			return fmt.Errorf("invalid string: %w", iter.Error)
 		}
-		f.SetString(tk.String())
+		s, ok := tk.Unquote()
+		if !ok {
+			return fmt.Errorf("invalid string: unquote failed")
+		}
+		if !f.CanSet() {
+			return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
+		}
+		f.SetString(s)
 	case reflect.Int, reflect.Int16, reflect.Int32, reflect.Int64:
 		iter.NextToken(&tk)
 		if tk.Type == jsontk.INVALID {
-			return fmt.Errorf("invalid number")
+			return fmt.Errorf("invalid number: %w", iter.Error)
 		}
 		if num, err := tk.Number().Int64(); err == nil {
+			if !f.CanSet() {
+				return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
+			}
 			f.SetInt(num)
 		} else {
 			return err
@@ -134,27 +182,32 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 	case reflect.Float32, reflect.Float64:
 		iter.NextToken(&tk)
 		if tk.Type == jsontk.INVALID {
-			return fmt.Errorf("invalid number")
+			return fmt.Errorf("invalid number: %w", iter.Error)
 		}
 		if num, err := tk.Number().Float64(); err == nil {
+			if !f.CanSet() {
+				return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
+			}
 			f.SetFloat(num)
 		} else {
 			return err
 		}
 	case reflect.Slice:
-		res, err := writeSlice(iter, f)
-		if err != nil {
+		if !f.CanSet() {
+			return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
+		}
+		if err := writeSlice(iter, f); err != nil {
 			return err
 		}
-		f.Set(res)
 	case reflect.Array:
 		return writeArray(iter, f)
 	case reflect.Map:
-		res, err := writeMap(iter, f)
-		if err != nil {
+		if !f.CanSet() {
+			return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
+		}
+		if err := writeMap(iter, f); err != nil {
 			return err
 		}
-		f.Set(res)
 	case reflect.Struct:
 		return writeStruct(iter, f)
 	default:
@@ -166,7 +219,6 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 var canUnmarshal = func() [10][26]bool {
 	rev := [10][26]bool{}
 	for t, k := range map[jsontk.TokenType][]reflect.Kind{
-		jsontk.NULL:         {reflect.Slice, reflect.Map, reflect.Pointer},
 		jsontk.STRING:       {reflect.String},
 		jsontk.BEGIN_ARRAY:  {reflect.Array, reflect.Slice},
 		jsontk.BEGIN_OBJECT: {reflect.Struct, reflect.Map},
@@ -180,12 +232,17 @@ var canUnmarshal = func() [10][26]bool {
 			rev[t][k] = true
 		}
 	}
+	for t, f := range createInterface {
+		if f != nil {
+			rev[t][reflect.Interface] = true
+		}
+	}
+	for i := 0; i < 10; i++ {
+		rev[i][reflect.Pointer] = true
+	}
 	return rev
 }()
 var createInterface = [10]func() reflect.Value{
-	jsontk.NULL: func() reflect.Value {
-		return reflect.ValueOf(nil)
-	},
 	jsontk.STRING: func() reflect.Value {
 		var s string
 		return reflect.ValueOf(&s).Elem()

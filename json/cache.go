@@ -14,6 +14,9 @@ func buildStructIndex(v reflect.Type, now []int, into map[string][]int) {
 			hasAnon = true
 			continue
 		}
+		if !f.IsExported() {
+			continue
+		}
 		name := f.Name
 		if s := strings.Split(f.Tag.Get("json"), ","); len(s) != 0 && s[0] != "" {
 			name = s[0]
@@ -35,7 +38,7 @@ func buildStructIndex(v reflect.Type, now []int, into map[string][]int) {
 			}
 			if ft.Kind() == reflect.Struct {
 				buildStructIndex(v, append(append([]int(nil), now...), i), into)
-			} else {
+			} else if f.IsExported() {
 				name := f.Name
 				if s := strings.Split(f.Tag.Get("json"), ","); len(s) != 0 && s[0] != "" {
 					name = s[0]
