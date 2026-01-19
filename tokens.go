@@ -77,17 +77,20 @@ func (j *Token) Number() json.Number {
 	return json.Number(j.Value)
 }
 
-// Unquote unquotes the underlying value as quoted string, and returns if it's successfully unquoted
-//
-// Warning: the returning string is valid only if underlying input byte slice doesn't change
-func (j *Token) Unquote() (string, bool) {
+func (j *Token) UnquoteBytes() ([]byte, bool) {
+	return unquoteBytes(j.Value)
+}
+
+func (j *Token) UnsafeUnquote() (string, bool) {
 	return unquote(j.Value)
 }
 
-// String behaves the same way as [Unquote] but not check for results, returns empty string on invalid results
-//
-// Warning: the returning string is valid only if underlying input byte slice doesn't change
 func (j *Token) String() string {
+	s, _ := unquoteBytes(j.Value)
+	return string(s)
+}
+
+func (j *Token) UnsafeString() string {
 	s, _ := unquote(j.Value)
 	return s
 }
