@@ -25,6 +25,7 @@ func (iter *Iterator) Reset(data []byte) {
 	iter.Error = nil
 	iter.head = 0
 	iter.data = data
+	iter.key = Token{}
 }
 
 func (iter *Iterator) Peek() TokenType {
