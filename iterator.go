@@ -64,23 +64,22 @@ func (iter *Iterator) NextToken(t *Token) *Token {
 
 func (iter *Iterator) Skip() (TokenType, int, int) {
 	if iter.Error != nil {
-		return INVALID, 0, 0
+		return INVALID, iter.head, 0
 	}
 	iter.head = skip(iter.data, iter.head)
 	loc := iter.head
 	typ, length, err := next(iter.data, iter.head)
-	iter.head += length
-
-	switch typ {
-	case BEGIN_ARRAY:
-		iter.head--
-		iter.NextArray(func(int) bool { iter.Skip(); return true })
-	case BEGIN_OBJECT:
-		iter.head--
-		iter.NextObject(func(*Token) bool { iter.Skip(); return true })
-	}
 	if err != nil {
 		iter.Error = err
+		return INVALID, iter.head, 0
+	}
+	switch typ {
+	case BEGIN_ARRAY:
+		iter.NextArray(nil)
+	case BEGIN_OBJECT:
+		iter.NextObject(nil)
+	default:
+		iter.head += length
 	}
 	return typ, loc, iter.head - loc
 }
@@ -127,12 +126,17 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 			return iter.Error
 		}
 		iter.head++
-		interrupted := !cb(&iter.key)
+		var interrupted bool
+		if cb == nil {
+			iter.Skip()
+		} else {
+			interrupted = !cb(&iter.key)
+		}
 		if iter.Error != nil {
 			return iter.Error
 		}
 		if interrupted {
-			iter.Error = ErrInterrupt
+			iter.Error = fmt.Errorf("%w at %d", ErrInterrupt, iter.head)
 			return nil
 		}
 
@@ -178,7 +182,12 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 			iter.head = skip(iter.data, iter.head+1)
 			return nil
 		}
-		interrupted := !cb(idx)
+		var interrupted bool
+		if cb == nil {
+			iter.Skip()
+		} else {
+			interrupted = !cb(idx)
+		}
 		if iter.Error != nil {
 			return iter.Error
 		}
