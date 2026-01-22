@@ -52,8 +52,8 @@ func writeMap(iter *jsontk.Iterator, v reflect.Value) error {
 	return iter.NextObject(func(key *jsontk.Token) bool {
 		mkey.SetString(key.String())
 		val := reflect.New(valType).Elem()
-		if e := writeVal(iter, val); e != nil {
-			iter.Error = e
+		if err := writeVal(iter, val); err != nil {
+			iter.Error = fmt.Errorf("%w for key %s", err, key.String())
 			return false
 		}
 		v.SetMapIndex(mkey, val)
@@ -75,7 +75,7 @@ func writeSlice(iter *jsontk.Iterator, v reflect.Value) error {
 		}
 		v.SetLen(idx + 1)
 		if err := writeVal(iter, v.Index(idx)); err != nil {
-			iter.Error = err
+			iter.Error = fmt.Errorf("%w at index %d", err, idx)
 			return false
 		}
 		return true
@@ -138,10 +138,15 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 			if !f.CanSet() {
 				return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
 			}
-			f.Set(createInterface[nxt]())
-		}
-		if err := writeVal(iter, f.Elem()); err != nil {
-			return err
+			v := createInterface[nxt]()
+			if err := writeVal(iter, v); err != nil {
+				return err
+			}
+			f.Set(v)
+		} else {
+			if err := writeVal(iter, f.Elem()); err != nil {
+				return err
+			}
 		}
 	case reflect.Pointer:
 		if f.IsNil() {
@@ -158,14 +163,14 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 		if tk.Type == jsontk.INVALID {
 			return fmt.Errorf("invalid string: %w", iter.Error)
 		}
-		s, ok := tk.Unquote()
+		s, ok := tk.UnquoteBytes()
 		if !ok {
 			return fmt.Errorf("invalid string: unquote failed")
 		}
 		if !f.CanSet() {
 			return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
 		}
-		f.SetString(s)
+		f.SetString(string(s))
 	case reflect.Int, reflect.Int16, reflect.Int32, reflect.Int64:
 		iter.NextToken(&tk)
 		if tk.Type == jsontk.INVALID {
