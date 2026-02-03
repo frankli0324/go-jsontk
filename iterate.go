@@ -62,17 +62,17 @@ func next(s []byte, i int) (typ TokenType, length int, err error) {
 		}
 		return NUMBER, j - i, nil
 	case 't':
-		if len(s)-i < 4 || s[i+1] != 'r' || s[i+2] != 'u' || s[i+3] != 'e' {
+		if len(s)-i < 4 || string(s[i:i+4]) != "true" {
 			return INVALID, 0, fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
 		}
 		return BOOLEAN, 4, nil
 	case 'f':
-		if len(s)-i < 5 || s[i+1] != 'a' || s[i+2] != 'l' || s[i+3] != 's' || s[i+4] != 'e' {
+		if len(s)-i < 5 || string(s[i+1:i+5]) != "alse" {
 			return INVALID, 0, fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
 		}
 		return BOOLEAN, 5, nil
 	case 'n':
-		if len(s)-i < 4 || s[i+1] != 'u' || s[i+2] != 'l' || s[i+3] != 'l' {
+		if len(s)-i < 4 || string(s[i:i+4]) != "null" {
 			return INVALID, 0, fmt.Errorf("%w, expected null", ErrUnexpectedToken)
 		}
 		return NULL, 4, nil

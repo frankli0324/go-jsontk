@@ -137,7 +137,7 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 			return iter.Error
 		}
 		if interrupted {
-			iter.Error = fmt.Errorf("%w at %d", ErrInterrupt, iter.head)
+			iter.Error = ErrInterrupt
 			return nil
 		}
 
