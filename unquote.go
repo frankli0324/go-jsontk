@@ -7,12 +7,9 @@ import (
 	"unicode/utf8"
 )
 
-var escapeChars = [10]byte{
-	('b' - 'b') >> 1: '\b', //lint:ignore SA4000 consistency
-	('f' - 'b') >> 1: '\f',
-	('n' - 'b') >> 1: '\n',
-	('r' - 'b') >> 1: '\r',
-	('t' - 'b') >> 1: '\t',
+var escapeChars = [256]byte{
+	'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t',
+	'"': '"', '/': '/', '\'': '\'', '\\': '\\', 'u': 0xff,
 }
 
 var u4map = func() (r [256]rune) {
@@ -51,98 +48,57 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 		return
 	}
 	s = s[1 : len(s)-1]
-
-	// Check for unusual characters. If there are none,
-	// then no unquoting is needed, so return a slice of the
-	// original bytes.
-	r := 0
-	for r < len(s) {
-		c := s[r]
-		if c == '\\' || c == '"' || c < ' ' {
-			break
-		}
-		if c < utf8.RuneSelf {
-			r++
-			continue
-		}
-		rr, size := utf8.DecodeRune(s[r:])
-		if rr == utf8.RuneError && size == 1 {
-			break
-		}
-		r += size
-	}
-	if r == len(s) {
+	r := bytes.IndexByte(s, '\\')
+	if r == -1 {
 		return s, true
 	}
 
-	b := make([]byte, len(s)+2*utf8.UTFMax)
-	w := copy(b, s[0:r])
-	for r < len(s) {
-		// Out of room? Can only happen if s is full of
-		// malformed UTF-8 and we're replacing each
-		// byte with RuneError.
-		if w >= len(b)-2*utf8.UTFMax {
-			nb := make([]byte, (len(b)+utf8.UTFMax)*2)
-			copy(nb, b[0:w])
-			b = nb
-		}
-		switch c := s[r]; {
-		case c == '\\':
-			r++
-			if r >= len(s) {
-				return
-			}
-			switch s[r] {
-			default:
-				return
-			case '"', '\\', '/', '\'':
-				b[w] = s[r]
-				r++
-				w++
-			case 'b', 'f', 'n', 'r', 't':
-				b[w] = escapeChars[(s[r]-'b')>>1]
-				r++
-				w++
-			case 'u':
-				if r+5 > len(s) {
-					return
-				}
-				rr := getu4(s[r+1 : r+5])
-				if rr < 0 {
-					return
-				}
-				r += 5
-				if utf16.IsSurrogate(rr) {
-					if r+6 > len(s) || s[r] != '\\' || s[r+1] != 'u' {
-						rr = unicode.ReplacementChar
-					} else {
-						rr = utf16.DecodeRune(rr, getu4(s[r+2:r+6]))
-						if rr != unicode.ReplacementChar {
-							r += 6
-						}
-					}
-				}
-				w += utf8.EncodeRune(b[w:], rr)
-			}
-
-		// control characters are invalid.
-		case c < ' ':
+	b := make([]byte, len(s))
+	w := 0
+	for r != -1 {
+		w += copy(b[w:], s[:r])
+		r++
+		if r >= len(s) {
 			return
-
-		// ASCII
-		case c < utf8.RuneSelf:
+		}
+		switch c := escapeChars[s[r]]; c {
+		default:
 			b[w] = c
 			r++
 			w++
-
-		// Coerce to well-formed UTF-8.
-		default:
-			rr, size := utf8.DecodeRune(s[r:])
-			r += size
+		case 0:
+			return
+		case 0xff:
+			if r+5 > len(s) {
+				return
+			}
+			rr := getu4(s[r+1 : r+5])
+			if rr < 0 {
+				return
+			}
+			r += 5
+			if utf16.IsSurrogate(rr) {
+				if r+6 > len(s) || s[r] != '\\' || s[r+1] != 'u' {
+					rr = unicode.ReplacementChar
+				} else {
+					rr = utf16.DecodeRune(rr, getu4(s[r+2:r+6]))
+					r += 6
+				}
+			}
 			w += utf8.EncodeRune(b[w:], rr)
 		}
+		if r == len(s) {
+			return b[:w], true
+		}
+		s = s[r:]
+		if s[0] == '\\' {
+			r = 0
+			continue
+		}
+		r = bytes.IndexByte(s, '\\')
 	}
-	return b[0:w], true
+	w += copy(b[w:], s)
+	return b[:w], true
 }
 
 // unquotedEqual returns unquoteBytes(s) == d without heap allocations
@@ -154,72 +110,57 @@ func unquotedEqual(s, d []byte) (equal bool) {
 	}
 	s = s[1 : len(s)-1]
 
-	ps := bytes.IndexByte(s, '\\')
-	if ps == -1 {
-		return bytes.Equal(s, d)
-	}
-
-	pd := ps
-	if pd > len(d) || !bytes.Equal(s[:ps], d[:pd]) {
-		return false
-	}
-	for ps < len(s) && pd < len(d) {
-		switch c := s[ps]; {
-		case c == '\\':
-			ps++
-			if ps == len(s) {
-				return
-			}
-			switch s[ps] {
-			default:
-				return
-			case '"', '\\', '/', '\'':
-				if d[pd] != s[ps] {
-					return false
-				}
-				ps++
-				pd++
-			case 'b', 'f', 'n', 'r', 't':
-				if d[pd] != escapeChars[(s[ps]-'b')>>1] {
-					return false
-				}
-				ps++
-				pd++
-			case 'u':
-				if ps+5 > len(s) {
-					return
-				}
-				rr := getu4(s[ps+1 : ps+5])
-				if rr < 0 {
-					return
-				}
-				ps += 5
-				if utf16.IsSurrogate(rr) {
-					if s[ps] != '\\' || s[ps+1] != 'u' || ps+6 > len(s) {
-						return
-					}
-					rr1 := getu4(s[ps+2 : ps+6])
-					rr = utf16.DecodeRune(rr, rr1)
-					if rr != unicode.ReplacementChar {
-						ps += 6
-					}
-				}
-				r, sz := utf8.DecodeRune(d[pd:])
-				if rr != r {
-					// could be RuneError, but wouldn't be equal anyway
-					return
-				}
-				pd += sz
-			}
-		// control characters are invalid.
-		case c < ' ':
+	r := bytes.IndexByte(s, '\\')
+	for r != -1 {
+		if r >= len(d) || r+1 == len(s) {
 			return
+		}
+		if !bytes.Equal(s[:r], d[:r]) {
+			return
+		}
+		switch esc := escapeChars[s[r+1]]; esc {
 		default:
-			if s[ps] != d[pd] {
+			if d[r] != esc {
 				return
 			}
-			ps, pd = ps+1, pd+1
+			d = d[r+1:]
+			r += 2
+		case 0:
+			return
+		case 0xff:
+			drune, sz := utf8.DecodeRune(d[r:])
+			d = d[r+sz:]
+			if drune == utf8.RuneError || r+6 > len(s) {
+				return
+			}
+			srune := getu4(s[r+2 : r+6])
+			if srune < 0 {
+				return
+			}
+			r += 6
+			if utf16.IsSurrogate(srune) {
+				if r+6 > len(s) || s[r] != '\\' || s[r+1] != 'u' {
+					return
+				}
+				srune = utf16.DecodeRune(srune, getu4(s[r+2:r+6]))
+				if srune == unicode.ReplacementChar {
+					return
+				}
+				r += 6
+			}
+			if srune != drune {
+				return
+			}
 		}
+		if r == len(s) {
+			return len(d) == 0
+		}
+		s = s[r:]
+		if s[0] == '\\' {
+			r = 0
+			continue
+		}
+		r = bytes.IndexByte(s, '\\')
 	}
-	return ps == len(s) && pd == len(d)
+	return bytes.Equal(s, d)
 }
