@@ -4,21 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/frankli0324/go-jsontk"
 )
+
+var iterPool = sync.Pool{New: func() any { return &jsontk.Iterator{} }}
 
 // Unmarshal decodes JSON-encoded data and stores the result
 // just like json.Unmarshal from the standard library.
 // plain interface is currently not supported as a target type.
 func Unmarshal(data []byte, into interface{}) error {
-	var iter jsontk.Iterator
+	iter := iterPool.Get().(*jsontk.Iterator)
+	defer iterPool.Put(iter)
 	iter.Reset(data)
 	v := reflect.ValueOf(into)
 	if v.Kind() != reflect.Pointer {
 		return fmt.Errorf("must Unmarshal into a pointer")
 	}
-	return writeVal(&iter, v.Elem())
+	return writeVal(iter, v.Elem())
 }
 
 func writeStruct(iter *jsontk.Iterator, v reflect.Value) error {
@@ -113,7 +117,7 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 			}
 			return fmt.Errorf("invalid jsontk internal state: expected null but got %s", t.String())
 		}
-		switch ftyp.Kind() {
+		switch fkind {
 		case reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Map:
 		default:
 			// this is intensional, std lib explicitly behaves like this!
@@ -138,7 +142,7 @@ func writeVal(iter *jsontk.Iterator, f reflect.Value) error {
 			if !f.CanSet() {
 				return fmt.Errorf("unable to assign %s to %s", nxt.String(), fkind.String())
 			}
-			v := createInterface[nxt]()
+			v := reflect.New(createInterface[nxt]).Elem()
 			if err := writeVal(iter, v); err != nil {
 				return err
 			}
@@ -247,25 +251,11 @@ var canUnmarshal = func() [10][26]bool {
 	}
 	return rev
 }()
-var createInterface = [10]func() reflect.Value{
-	jsontk.STRING: func() reflect.Value {
-		var s string
-		return reflect.ValueOf(&s).Elem()
-	},
-	jsontk.BEGIN_ARRAY: func() reflect.Value {
-		var s []interface{}
-		return reflect.ValueOf(&s).Elem()
-	},
-	jsontk.BEGIN_OBJECT: func() reflect.Value {
-		var o map[string]interface{}
-		return reflect.ValueOf(&o).Elem()
-	},
-	jsontk.BOOLEAN: func() reflect.Value {
-		var b bool
-		return reflect.ValueOf(&b).Elem()
-	},
-	jsontk.NUMBER: func() reflect.Value {
-		var f float64
-		return reflect.ValueOf(&f).Elem()
-	},
+
+var createInterface = [10]reflect.Type{
+	jsontk.STRING:       reflect.TypeOf(""),
+	jsontk.BEGIN_ARRAY:  reflect.TypeOf([]interface{}{}),
+	jsontk.BEGIN_OBJECT: reflect.TypeOf(map[string]interface{}{}),
+	jsontk.BOOLEAN:      reflect.TypeOf(false),
+	jsontk.NUMBER:       reflect.TypeOf(float64(0)),
 }
