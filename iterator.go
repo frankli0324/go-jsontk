@@ -22,10 +22,7 @@ type Iterator struct {
 }
 
 func (iter *Iterator) Reset(data []byte) {
-	iter.Error = nil
-	iter.head = 0
-	iter.data = data
-	iter.key = Token{}
+	*iter = Iterator{data: data}
 }
 
 func (iter *Iterator) Peek() TokenType {
@@ -193,7 +190,7 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 			return iter.Error
 		}
 		if interrupted {
-			iter.Error = fmt.Errorf("%w at %d", ErrInterrupt, iter.head)
+			iter.Error = ErrInterrupt
 			return nil
 		}
 		iter.head = skip(iter.data, iter.head)
