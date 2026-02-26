@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func assert(t *testing.T, b bool) {
+	t.Helper()
+	if !b {
+		t.FailNow()
+	}
+}
+
 type Group struct {
 	Name   string           `json:"name"`
 	Tags   []string         `json:"tags"`
@@ -190,5 +197,55 @@ func Benchmark(b *testing.B) {
 				b.Fatalf("custom Unmarshal failed: %v", err)
 			}
 		}
+	})
+}
+
+func sliceEqual[T comparable](a, b []T) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestStrangeBehavior(t *testing.T) {
+	t.Run("input non-empty slice", func(t *testing.T) {
+		v := []int{1, 2, 3, 4}
+		assert(t, json.Unmarshal([]byte("[5,6]"), &v) == nil)
+		assert(t, sliceEqual(v[:4], []int{5, 6, 3, 4}))
+		v = []int{1, 2, 3, 4}
+		assert(t, Unmarshal([]byte("[5,6]"), &v) == nil)
+		assert(t, sliceEqual(v[:4], []int{5, 6, 3, 4}))
+	})
+	t.Run("input non-empty mismatch slice", func(t *testing.T) {
+		v := []int{1, 2, 3, 4}
+		assert(t, json.Unmarshal([]byte("[5,\"6\"]"), &v) != nil)
+		assert(t, sliceEqual(v[:4], []int{5, 2, 3, 4}))
+		v = []int{1, 2, 3, 4}
+		assert(t, Unmarshal([]byte("[5,\"6\"]"), &v) != nil)
+		assert(t, sliceEqual(v[:4], []int{5, 2, 3, 4}))
+	})
+	t.Run("input non-empty map", func(t *testing.T) {
+		v := map[string]int{"test": 1}
+		assert(t, json.Unmarshal([]byte(`{"test2":2}`), &v) == nil)
+		assert(t, v["test"] == 1)
+	})
+	t.Run("assign null to int", func(t *testing.T) {
+		v := 1
+		assert(t, json.Unmarshal([]byte(`null`), &v) == nil)
+		assert(t, v == 1)
+	})
+	t.Run("assign null to map inside struct", func(t *testing.T) {
+		m := map[string]int{"test": 1}
+		v := struct {
+			M map[string]int
+		}{M: m}
+		assert(t, json.Unmarshal([]byte(`{"M":null}`), &v) == nil)
+		assert(t, v.M == nil)
+		assert(t, m["test"] == 1)
 	})
 }
