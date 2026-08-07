@@ -8,6 +8,65 @@ import (
 	"testing"
 )
 
+func b(s ...string) [][]byte {
+	ret := make([][]byte, len(s))
+	for i, s := range s {
+		if s == "" {
+			ret[i] = nil
+		} else {
+			ret[i] = []byte(s)
+		}
+	}
+	return ret
+}
+
+func Iterate(s []byte, cb func(typ TokenType, idx, len int)) error {
+	hadComma, wantComma := false, false
+
+	for i := 0; i < len(s); {
+		i = skip(s, i)
+
+		currentType, length, errOnce := next(s, i)
+
+		start := i
+		// prepare for lookahead, consume until next char is valid
+		i = skip(s, i+length)
+		if i < len(s) && s[i] == ':' {
+			if currentType == STRING {
+				currentType = KEY
+				i++
+			} else {
+				return ErrUnexpectedToken
+			}
+		}
+
+		if currentType == END_ARRAY || currentType == END_OBJECT {
+			// intensionally don't check for previous comma
+			// if StrictComma && hadComma {
+			// 	return fmt.Errorf("%w at %d, unexpected comma", ErrUnexpectedSep, start-1)
+			// }
+		} else if wantComma && !hadComma {
+			return ErrUnexpectedSep
+		} else if !wantComma && hadComma {
+			return ErrUnexpectedSep
+		}
+		wantComma = commaAfterToken[currentType]
+		hadComma = i < len(s) && s[i] == ','
+		if hadComma {
+			i++
+		}
+
+		cb(currentType, start, length)
+		if errOnce != nil {
+			return fmt.Errorf("%w at %d", errOnce, start)
+		}
+	}
+	// if StrictComma && hadComma {
+	// 	return fmt.Errorf("%w at end, unexpected comma", ErrUnexpectedSep)
+	// }
+	return nil
+}
+
 func Tokenize(s []byte) ([]Token, error) {
 	store := []Token{}
 	return store, Iterate(s, func(typ TokenType, idx, len int) {
