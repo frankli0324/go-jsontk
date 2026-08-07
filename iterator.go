@@ -1,9 +1,5 @@
 package jsontk
 
-import (
-	"fmt"
-)
-
 var typMap = [256]TokenType{
 	'-': NUMBER, '0': NUMBER, '1': NUMBER,
 	'2': NUMBER, '3': NUMBER, '4': NUMBER,
@@ -91,18 +87,18 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 	}
 	iter.head = skip(iter.data, iter.head)
 	if iter.head >= len(iter.data) {
-		iter.Error = fmt.Errorf("%w while reading object", ErrEarlyEOF)
+		iter.Error = ErrEarlyEOF.at(iter.head, "while reading object")
 		return iter.Error
 	}
 	if iter.data[iter.head] != '{' {
-		iter.Error = fmt.Errorf("%w at %d, expected BEGIN_OBJECT", ErrUnexpectedToken, iter.head)
+		iter.Error = ErrUnexpectedToken.at(iter.head, "expected BEGIN_OBJECT")
 		return iter.Error
 	}
 	iter.head++
 	for {
 		iter.head = skip(iter.data, iter.head)
 		if iter.head >= len(iter.data) {
-			iter.Error = fmt.Errorf("%w while reading object, expecting object key or END_OBJECT", ErrEarlyEOF)
+			iter.Error = ErrEarlyEOF.at(iter.head, "while reading object, expecting object key or END_OBJECT")
 			return iter.Error
 		}
 		currentType, length, errOnce := next(iter.data, iter.head)
@@ -113,14 +109,14 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 				return nil
 			}
 			if iter.Error == nil {
-				iter.Error = fmt.Errorf("%w at %d, expected string key", ErrUnexpectedToken, iter.head)
+				iter.Error = ErrUnexpectedToken.at(iter.head, "expected string key")
 			}
 			return iter.Error
 		}
 		iter.key = Token{Type: KEY, Value: iter.data[iter.head : iter.head+length]}
 		iter.head = skip(iter.data, iter.head+length)
 		if iter.head >= len(iter.data) || iter.data[iter.head] != ':' {
-			iter.Error = fmt.Errorf("%w at %d, expected colon", ErrUnexpectedToken, iter.head)
+			iter.Error = ErrUnexpectedToken.at(iter.head, "expected colon")
 			return iter.Error
 		}
 		iter.head++
@@ -140,12 +136,12 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 
 		iter.head = skip(iter.data, iter.head)
 		if iter.head >= len(iter.data) {
-			iter.Error = fmt.Errorf("%w while reading object, expecting comma or END_OBJECT", ErrEarlyEOF)
+			iter.Error = ErrEarlyEOF.at(iter.head, "while reading object, expecting comma or END_OBJECT")
 			return iter.Error
 		}
 		if iter.data[iter.head] != ',' {
 			if iter.data[iter.head] != '}' {
-				iter.Error = fmt.Errorf("%w at %d, expected comma or END_OBJECT", ErrUnexpectedToken, iter.head)
+				iter.Error = ErrUnexpectedToken.at(iter.head, "expected comma or END_OBJECT")
 				return iter.Error
 			}
 			iter.head++
@@ -161,11 +157,11 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 	}
 	iter.head = skip(iter.data, iter.head)
 	if iter.head >= len(iter.data) {
-		iter.Error = fmt.Errorf("%w while reading array", ErrEarlyEOF)
+		iter.Error = ErrEarlyEOF.at(iter.head, "while reading array")
 		return iter.Error
 	}
 	if iter.data[iter.head] != '[' {
-		iter.Error = fmt.Errorf("%w at %d, expected BEGIN_ARRAY", ErrUnexpectedToken, iter.head)
+		iter.Error = ErrUnexpectedToken.at(iter.head, "expected BEGIN_ARRAY")
 		return iter.Error
 	}
 	iter.head++
@@ -173,7 +169,7 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 	for idx := 0; ; idx++ {
 		iter.head = skip(iter.data, iter.head)
 		if iter.head >= len(iter.data) {
-			iter.Error = fmt.Errorf("%w while reading array, expecting element or END_ARRAY", ErrEarlyEOF)
+			iter.Error = ErrEarlyEOF.at(iter.head, "while reading array, expecting element or END_ARRAY")
 			return iter.Error
 		}
 		if iter.data[iter.head] == ']' { // [] | [1,]
@@ -195,12 +191,12 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 		}
 		iter.head = skip(iter.data, iter.head)
 		if iter.head >= len(iter.data) {
-			iter.Error = fmt.Errorf("%w while reading array, expecting comma or END_ARRAY", ErrEarlyEOF)
+			iter.Error = ErrEarlyEOF.at(iter.head, "while reading array, expecting comma or END_ARRAY")
 			return iter.Error
 		}
 		if iter.data[iter.head] != ',' {
 			if iter.data[iter.head] != ']' {
-				iter.Error = fmt.Errorf("%w at %d, expected comma or END_ARRAY", ErrUnexpectedToken, iter.head)
+				iter.Error = ErrUnexpectedToken.at(iter.head, "expected comma or END_ARRAY")
 				return iter.Error
 			}
 			iter.head++

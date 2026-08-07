@@ -1,9 +1,5 @@
 package jsontk
 
-import (
-	"fmt"
-)
-
 func skip(s []byte, i int) int {
 	for i < len(s) {
 		switch s[i] {
@@ -42,7 +38,7 @@ func next(s []byte, i int) (typ TokenType, length int, err error) {
 			}
 		}
 		if j == len(s) {
-			return INVALID, 0, fmt.Errorf("%w, expected end of string", ErrEarlyEOF)
+			return INVALID, 0, ErrEarlyEOF.at(i, "expected end of string")
 		}
 		return STRING, j - i + 1, nil
 	case '{':
@@ -63,17 +59,17 @@ func next(s []byte, i int) (typ TokenType, length int, err error) {
 		return NUMBER, j - i, nil
 	case 't':
 		if len(s)-i < 4 || string(s[i:i+4]) != "true" {
-			return INVALID, 0, fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
+			return INVALID, 0, ErrUnexpectedToken.at(i, "expected boolean")
 		}
 		return BOOLEAN, 4, nil
 	case 'f':
 		if len(s)-i < 5 || string(s[i+1:i+5]) != "alse" {
-			return INVALID, 0, fmt.Errorf("%w, expected boolean", ErrUnexpectedToken)
+			return INVALID, 0, ErrUnexpectedToken.at(i, "expected boolean")
 		}
 		return BOOLEAN, 5, nil
 	case 'n':
 		if len(s)-i < 4 || string(s[i:i+4]) != "null" {
-			return INVALID, 0, fmt.Errorf("%w, expected null", ErrUnexpectedToken)
+			return INVALID, 0, ErrUnexpectedToken.at(i, "expected null")
 		}
 		return NULL, 4, nil
 	case '}':
