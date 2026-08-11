@@ -20,6 +20,20 @@ func skip(s []byte, i int) int {
 	return i
 }
 
+func skipTo(s []byte, expect byte, i int) int {
+	for i < len(s) {
+		switch s[i] {
+		case expect:
+			return i
+		case ' ', '\n', '\t', '\r':
+			i++
+		default:
+			return i
+		}
+	}
+	return i
+}
+
 func next(s []byte, i int) (typ TokenType, length int, err error) {
 	if len(s) <= i {
 		return INVALID, 0, ErrEarlyEOF

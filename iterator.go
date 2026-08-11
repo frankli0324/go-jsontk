@@ -85,7 +85,7 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 	if iter.Error != nil {
 		return iter.Error
 	}
-	iter.head = skip(iter.data, iter.head)
+	iter.head = skipTo(iter.data, '{', iter.head)
 	if iter.head >= len(iter.data) {
 		iter.Error = ErrEarlyEOF.at(iter.head, "while reading object")
 		return iter.Error
@@ -114,7 +114,7 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 			return iter.Error
 		}
 		iter.key = Token{Type: KEY, Value: iter.data[iter.head : iter.head+length]}
-		iter.head = skip(iter.data, iter.head+length)
+		iter.head = skipTo(iter.data, ':', iter.head+length)
 		if iter.head >= len(iter.data) || iter.data[iter.head] != ':' {
 			iter.Error = ErrUnexpectedToken.at(iter.head, "expected colon")
 			return iter.Error
@@ -134,7 +134,7 @@ func (iter *Iterator) NextObject(cb func(key *Token) bool) error {
 			return nil
 		}
 
-		iter.head = skip(iter.data, iter.head)
+		iter.head = skipTo(iter.data, ',', iter.head)
 		if iter.head >= len(iter.data) {
 			iter.Error = ErrEarlyEOF.at(iter.head, "while reading object, expecting comma or END_OBJECT")
 			return iter.Error
@@ -155,7 +155,7 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 	if iter.Error != nil {
 		return iter.Error
 	}
-	iter.head = skip(iter.data, iter.head)
+	iter.head = skipTo(iter.data, '[', iter.head)
 	if iter.head >= len(iter.data) {
 		iter.Error = ErrEarlyEOF.at(iter.head, "while reading array")
 		return iter.Error
@@ -189,7 +189,7 @@ func (iter *Iterator) NextArray(cb func(idx int) bool) error {
 			iter.Error = ErrInterrupt
 			return nil
 		}
-		iter.head = skip(iter.data, iter.head)
+		iter.head = skipTo(iter.data, ',', iter.head)
 		if iter.head >= len(iter.data) {
 			iter.Error = ErrEarlyEOF.at(iter.head, "while reading array, expecting comma or END_ARRAY")
 			return iter.Error
