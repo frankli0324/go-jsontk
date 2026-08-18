@@ -57,25 +57,57 @@ func (iter *Iterator) NextToken(t *Token) *Token {
 }
 
 func (iter *Iterator) Skip() (TokenType, int, int) {
-	if iter.Error != nil {
+	switch typ := iter.Peek(); typ {
+	case BEGIN_ARRAY, BEGIN_OBJECT:
+		iter.skipContainer()
+		if iter.Error != nil {
+			return INVALID, 0, 0
+		}
+		return typ, iter.head, 0
+	case INVALID, END_ARRAY, END_OBJECT:
 		return INVALID, iter.head, 0
-	}
-	iter.head = skip(iter.data, iter.head)
-	loc := iter.head
-	typ, length, err := next(iter.data, iter.head)
-	if err != nil {
-		iter.Error = err
-		return INVALID, iter.head, 0
-	}
-	switch typ {
-	case BEGIN_ARRAY:
-		iter.NextArray(nil)
-	case BEGIN_OBJECT:
-		iter.NextObject(nil)
 	default:
-		iter.head += length
+		typ, length, err := next(iter.data, iter.head)
+		iter.Error = err
+		if err == nil {
+			iter.head += length
+		}
+		return typ, iter.head, length
 	}
-	return typ, loc, iter.head - loc
+}
+
+var act = [256]int8{'"': 2, '{': 1, '[': 1, '}': -1, ']': -1}
+
+func (iter *Iterator) skipContainer() {
+	data := iter.data
+	i := iter.head + 1
+	for depth := 1; depth > 0; {
+		var a int8
+		for i < len(data) {
+			if a = act[data[i]]; a != 0 {
+				break
+			}
+			i++
+			for i+4 <= len(data) && act[data[i]]|act[data[i+1]]|act[data[i+2]]|act[data[i+3]] == 0 {
+				i += 4
+			}
+		}
+		if i >= len(data) {
+			iter.Error = ErrEarlyEOF.at(i, "unexpected EOF while skipping value")
+			break
+		}
+		if a != 2 {
+			depth += int(a)
+			i++
+			continue
+		}
+		var length int
+		if _, length, iter.Error = next(data, i); iter.Error != nil {
+			break
+		}
+		i += length
+	}
+	iter.head = i
 }
 
 // NextObject iterates over the next value as an object, assuming that it is one.
