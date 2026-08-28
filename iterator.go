@@ -57,13 +57,15 @@ func (iter *Iterator) NextToken(t *Token) *Token {
 }
 
 func (iter *Iterator) Skip() (TokenType, int, int) {
-	switch typ := iter.Peek(); typ {
+	typ := iter.Peek()
+	loc := iter.head
+	switch typ {
 	case BEGIN_ARRAY, BEGIN_OBJECT:
 		iter.skipContainer()
 		if iter.Error != nil {
-			return INVALID, 0, 0
+			return INVALID, loc, 0
 		}
-		return typ, iter.head, 0
+		return typ, loc, iter.head - loc
 	case INVALID, END_ARRAY, END_OBJECT:
 		return INVALID, iter.head, 0
 	default:
@@ -72,7 +74,7 @@ func (iter *Iterator) Skip() (TokenType, int, int) {
 		if err == nil {
 			iter.head += length
 		}
-		return typ, iter.head, length
+		return typ, loc, length
 	}
 }
 
