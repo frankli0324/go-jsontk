@@ -1,6 +1,10 @@
 package jsontk
 
-import "bytes"
+import (
+	"bytes"
+	"encoding/binary"
+	"math/bits"
+)
 
 var numByte = [256]bool{
 	'0': true, '1': true, '2': true, '3': true, '4': true,
@@ -40,18 +44,35 @@ func next(s []byte, i int) (typ TokenType, length int, err error) {
 	}
 	switch s[i] {
 	case '"':
-		for j := i + 1; ; j++ {
-			q := bytes.IndexByte(s[j:], '"')
-			if q < 0 {
-				return INVALID, 0, ErrEarlyEOF.at(i, "expected end of string")
+		j := i + 1
+		var q int
+		if j+8 <= len(s) {
+			v := binary.LittleEndian.Uint64(s[j:]) ^ 0x2222222222222222
+			if m := (v - 0x0101010101010101) &^ v & 0x8080808080808080; m != 0 {
+				j += bits.TrailingZeros64(m) >> 3
+				goto check
 			}
-			j += q
-			for q = j - 1; q > i && s[q] == '\\'; q-- {
-			}
-			if (j-q)&1 == 1 { // even backslash run: quote closes the string
-				return STRING, j - i + 1, nil
-			}
+			j += 8
 		}
+	scan:
+		q = bytes.IndexByte(s[j:], '"')
+		if q < 0 {
+			return INVALID, 0, ErrEarlyEOF.at(i, "expected end of string")
+		}
+		j += q
+	check:
+		q = j - 1
+		for q > i && s[q] == '\\' {
+			q--
+		}
+		if (j-q)&1 == 1 { // even backslash run: quote closes the string
+			return STRING, j - i + 1, nil
+		}
+		j++
+		if j < len(s) {
+			goto scan
+		}
+		return INVALID, 0, ErrEarlyEOF.at(i, "expected end of string")
 	case '{':
 		return BEGIN_OBJECT, 1, nil
 	case '[':

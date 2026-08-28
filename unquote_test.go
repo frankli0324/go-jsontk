@@ -63,6 +63,47 @@ func TestUnquotedEqual(t *testing.T) {
 	}
 }
 
+func TestEqualStringNoEscape(t *testing.T) {
+	cases := []struct {
+		s    []byte
+		d    []byte
+		want bool
+	}{
+		{[]byte(`"test"`), []byte("test"), true},
+		{[]byte(`"test"`), []byte("nest"), false},
+		{[]byte(`""`), []byte(""), true},
+		{[]byte(`"\test"`), []byte(`\test`), true},  // backslash kept literally
+		{[]byte(`"\test"`), []byte("\test"), false}, // unescaped form does not match
+		{[]byte(`"a\"b"`), []byte(`a\"b`), true},
+		{[]byte(`"a\"b"`), []byte(`a"b`), false},
+		{[]byte(`"阿斯顿"`), []byte("阿斯顿"), true},
+		{[]byte(`123`), []byte("123"), false},  // not a string token
+		{[]byte(`"abc`), []byte("abc"), false}, // unterminated
+	}
+	for _, c := range cases {
+		tk := Token{Type: STRING, Value: c.s}
+		if got := tk.EqualStringNoEscape(string(c.d)); got != c.want {
+			t.Errorf("EqualStringNoEscape(%q, %q) = %v, want %v", c.s, c.d, got, c.want)
+		}
+	}
+}
+
+func BenchmarkEqualStringNoEscape(b *testing.B) {
+	pairs := [][2][]byte{
+		{[]byte(`"test"`), []byte("test")},
+		{[]byte(`"key_5000"`), []byte("key_5000")},
+		{[]byte(`"阿斯顿发个好借口了"`), []byte("阿斯顿发个好借口了")},
+	}
+	for i := 0; i < b.N; i++ {
+		for _, cs := range pairs {
+			tk := Token{Type: STRING, Value: cs[0]}
+			if !tk.EqualStringNoEscape(string(cs[1])) {
+				b.Errorf("unequal raw string, want:%s, has:%s", cs[1], cs[0])
+			}
+		}
+	}
+}
+
 func FuzzUnquotedEqual(f *testing.F) {
 	f.Add([]byte(`""`))
 	f.Add([]byte(`"abc"`))

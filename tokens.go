@@ -99,6 +99,17 @@ func (j *Token) EqualString(s string) bool {
 	return unquotedEqualStr(j.Value, s)
 }
 
+// EqualStringNoEscape is like EqualString but compares the raw string
+// content without processing escape sequences. It is faster but only
+// matches when the JSON string contains no backslash escapes.
+func (j *Token) EqualStringNoEscape(s string) bool {
+	t := j.Value
+	if len(t) < 2 || t[0] != '"' || t[len(t)-1] != '"' {
+		return false
+	}
+	return string(t[1:len(t)-1]) == s
+}
+
 func (j *Token) Bool() bool {
 	// since it's successfully tokenized, values should be always certain
 	return bytes.Equal(j.Value, []byte("true"))
