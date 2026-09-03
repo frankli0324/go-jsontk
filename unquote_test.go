@@ -63,6 +63,22 @@ func TestUnquotedEqual(t *testing.T) {
 	}
 }
 
+func TestUnquotedEqualRejectsMismatchBeforeEscape(t *testing.T) {
+	s := []byte(`"abaaaaa\t"`)
+	d := []byte("acaaaaa\t")
+	if unquotedEqual(s, d) {
+		t.Fatalf("unquotedEqual(%q, %q) = true, want false", s, d)
+	}
+}
+
+func TestUnquotedEqualRejectsRawEscapeBytes(t *testing.T) {
+	s := []byte(`"\"\"\"\""`)
+	d := []byte(`\"\"\"\"`)
+	if unquotedEqual(s, d) {
+		t.Fatalf("unquotedEqual(%q, %q) = true, want false", s, d)
+	}
+}
+
 func TestEqualStringNoEscape(t *testing.T) {
 	cases := []struct {
 		s    []byte
@@ -135,6 +151,24 @@ func FuzzUnquotedEqual(f *testing.F) {
 		var std string
 		if json.Unmarshal(s, &std) == nil && (!ok || string(out) != std) {
 			t.Fatalf("mismatch against std: %q", s)
+		}
+	})
+}
+
+func FuzzUnquotedEqualAgainstUnquote(f *testing.F) {
+	f.Add([]byte(`"abaaaaa\t"`), []byte("acaaaaa\t"))
+	f.Add([]byte(`"abc"`), []byte("abc"))
+	f.Add([]byte(`"\u0911"`), []byte("ऑ"))
+	f.Add([]byte(`"\u0911"`), []byte("औ"))
+
+	f.Fuzz(func(t *testing.T, s, d []byte) {
+		out, ok := unquoteBytes(s)
+		var std string
+		if !ok || bytes.ContainsRune(out, utf8.RuneError) || json.Unmarshal(s, &std) != nil {
+			return
+		}
+		if got, want := unquotedEqual(s, d), bytes.Equal(out, d); got != want {
+			t.Fatalf("inconsistent:\ninput: %q\ntarget: %q\nunquoted: %q\ngot: %v\nwant: %v", s, d, out, got, want)
 		}
 	})
 }

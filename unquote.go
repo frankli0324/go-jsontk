@@ -2,6 +2,8 @@ package jsontk
 
 import (
 	"bytes"
+	"encoding/binary"
+	"math/bits"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -104,63 +106,108 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 // unquotedEqual returns unquoteBytes(s) == d without heap allocations
 // it assumes that quote escape is always correctly handled, so it won't
 // complain about unescaped quotes ("te"st" -> te"st)
-func unquotedEqual(s, d []byte) (equal bool) {
+const (
+	loBytes = 0x0101010101010101
+	hiBytes = 0x8080808080808080
+	slash8  = uint64('\\') * loBytes
+)
+
+func unquotedEqual(s, d []byte) bool {
 	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
 		return false
 	}
 	s = s[1 : len(s)-1]
-
-	r := bytes.IndexByte(s, '\\')
-	for r != -1 {
-		if r >= len(d) || r+1 == len(s) {
-			return
+loop:
+	if len(d) > len(s) {
+		return false
+	}
+	if len(s) >= 24 {
+		r := bytes.IndexByte(s, '\\')
+		if r < 0 {
+			return bytes.Equal(s, d)
+		}
+		if r >= len(d) || r+1 >= len(s) {
+			return false
 		}
 		if !bytes.Equal(s[:r], d[:r]) {
-			return
-		}
-		switch esc := escapeChars[s[r+1]]; esc {
-		default:
-			if d[r] != esc {
-				return
-			}
-			d = d[r+1:]
-			r += 2
-		case 0:
-			return
-		case 0xff:
-			drune, sz := utf8.DecodeRune(d[r:])
-			d = d[r+sz:]
-			if drune == utf8.RuneError || r+6 > len(s) {
-				return
-			}
-			srune := getu4(s[r+2 : r+6])
-			if srune < 0 {
-				return
-			}
-			r += 6
-			if utf16.IsSurrogate(srune) {
-				if r+6 > len(s) || s[r] != '\\' || s[r+1] != 'u' {
-					return
-				}
-				srune = utf16.DecodeRune(srune, getu4(s[r+2:r+6]))
-				if srune == unicode.ReplacementChar {
-					return
-				}
-				r += 6
-			}
-			if srune != drune {
-				return
-			}
-		}
-		if r == len(s) {
-			return len(d) == 0
+			return false
 		}
 		s = s[r:]
-		if s[0] == '\\' {
-			r = 0
+		d = d[r:]
+		goto escape
+	}
+	for i := 0; i+8 <= len(d); i += 8 {
+		vs := binary.LittleEndian.Uint64(s[i:])
+		x := vs ^ slash8
+		z := (x - loBytes) &^ x & hiBytes
+		if z == 0 { // no backslash in this chunk: decoded == raw
+			if vs != binary.LittleEndian.Uint64(d[i:]) {
+				return false
+			}
 			continue
 		}
-		r = bytes.IndexByte(s, '\\')
+		slash := bits.TrailingZeros64(z) >> 3
+		if vd := binary.LittleEndian.Uint64(d[i:]); vs != vd {
+			mismatch := bits.TrailingZeros64(vs^vd) >> 3
+			if mismatch < slash {
+				return false
+			}
+		}
+		i += slash
+		s = s[i:]
+		d = d[i:]
+		goto escape
 	}
-	return bytes.Equal(s, d)
+	for i := 0; i < len(d); i++ {
+		if s[i] == '\\' {
+			s = s[i:]
+			d = d[i:]
+			goto escape
+		}
+		if s[i] != d[i] {
+			return false
+		}
+	}
+	return len(s) == len(d)
+
+escape:
+	if len(s) < 2 || len(d) == 0 {
+		return false
+	}
+	switch esc := escapeChars[s[1]]; esc {
+	case 0:
+		return false
+	default:
+		if d[0] != esc {
+			return false
+		}
+		s = s[2:]
+		d = d[1:]
+	case 0xff:
+		dr, sz := utf8.DecodeRune(d)
+		if dr == utf8.RuneError || len(s) < 6 {
+			return false
+		}
+		sr := getu4(s[2:6])
+		if sr < 0 {
+			return false
+		}
+		if utf16.IsSurrogate(sr) {
+			if len(s) < 12 || s[6] != '\\' || s[7] != 'u' {
+				return false
+			}
+			sr = utf16.DecodeRune(sr, getu4(s[8:12]))
+			if sr == unicode.ReplacementChar {
+				return false
+			}
+			s = s[12:]
+		} else {
+			s = s[6:]
+		}
+		if sr != dr {
+			return false
+		}
+		d = d[sz:]
+	}
+	goto loop
 }
