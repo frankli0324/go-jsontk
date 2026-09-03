@@ -99,9 +99,10 @@ func (j *Token) EqualString(s string) bool {
 	return unquotedEqualStr(j.Value, s)
 }
 
-// EqualStringNoEscape is like EqualString but compares the raw string
-// content without processing escape sequences. It is faster but only
-// matches when the JSON string contains no backslash escapes.
+// EqualStringNoEscape checks equality of string without decoding JSON escapes.
+//
+// do not use it on untrusted JSON: an escaped key like "\u0061dmin" or "a\nb"
+// won't match "admin" or "a.b". This raw match is a fast lane that assumes escape-free strings.
 func (j *Token) EqualStringNoEscape(s string) bool {
 	t := j.Value
 	if len(t) < 2 || t[0] != '"' || t[len(t)-1] != '"' {
